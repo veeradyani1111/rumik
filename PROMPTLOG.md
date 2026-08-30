@@ -12,3 +12,10 @@ This append-only log records user-authored prompts given to the coding agent in 
 
 > pls continue
 
+## 003 — 2026-08-30
+
+> okay
+
+## 004 — 2026-08-30
+
+> okay. please start the sdk and the kyc app. also put the envs in place and i will populate them with values.
