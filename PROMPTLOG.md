@@ -37,3 +37,7 @@ This append-only log records user-authored prompts given to the coding agent in 
 
 > nah wait, u know wait. let's keep one env file because i think I will deploy the whole folder together. jus make sure the kyc folder consumes the platform api key only.
 > check the env. i have populated it. check the livekit creds
+
+## 009 — 2026-08-30
+
+> ok now turn both on so i can use
