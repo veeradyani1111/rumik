@@ -53,7 +53,6 @@ const RESULT_SCHEMA = {
       required: ["name", "pan", "dob"],
       additionalProperties: false,
     },
-    session_id: { type: "string", description: "Injected by the browser SDK event when omitted" },
     notes: { type: "string" },
   },
   required: ["decision", "checks", "extracted", "notes"],

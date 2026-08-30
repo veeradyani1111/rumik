@@ -35,14 +35,13 @@ class LookResult:
 
 
 class FrameSampler(FrameProcessor):
-    """Keeps a cheap rolling camera buffer and encodes only explicit looks."""
+    """Keeps the latest camera frame and encodes only explicit looks."""
 
     def __init__(self, policy: SamplePolicy, *, clock: Callable[[], float] = monotonic) -> None:
         super().__init__()
         self.policy = policy
         self._now = clock
         self.latest_raw: RawCapture | None = None
-        self._recent: deque[RawCapture] = deque()
         self._last_accept_at: float | None = None
         self._spend_timestamps: deque[float] = deque()
         self._last_encoded: SampledImage | None = None
@@ -58,11 +57,9 @@ class FrameSampler(FrameProcessor):
 
         capture = RawCapture(image=image.convert("RGB").copy(), captured_at=now)
         self.latest_raw = capture
-        self._recent.append(capture)
         self._last_accept_at = now
         self.accepted_count += 1
         self._new_frame_event.set()
-        self._prune_recent(now)
         return True
 
     async def look(self, *, reason: str, motion: bool = False) -> LookResult:
@@ -105,7 +102,8 @@ class FrameSampler(FrameProcessor):
     async def _captures_for_look(self, motion: bool) -> list[RawCapture]:
         if not motion:
             return [self.latest_raw] if self.latest_raw else []
-        captures = [self.latest_raw] if self.latest_raw else []
+        fallback = self.latest_raw
+        captures: list[RawCapture] = []
         loop = asyncio.get_running_loop()
         deadline = loop.time() + (self.policy.burst_window_ms / 1000)
         observed_count = self.accepted_count
@@ -122,14 +120,11 @@ class FrameSampler(FrameProcessor):
             if self.accepted_count > observed_count and self.latest_raw is not None:
                 captures.append(self.latest_raw)
                 observed_count = self.accepted_count
+        if not captures and fallback is not None:
+            captures.append(fallback)
         while captures and len(captures) < self.policy.burst_count:
             captures.append(captures[-1])
         return captures
-
-    def _prune_recent(self, now: float) -> None:
-        cutoff = now - (self.policy.burst_window_ms / 1000)
-        while self._recent and self._recent[0].captured_at < cutoff:
-            self._recent.popleft()
 
     def _prune_spend(self, now: float) -> None:
         cutoff = now - 60.0

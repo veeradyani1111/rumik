@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from sdk.server.agent_runner import AgentRunner, reap_and_record
+from sdk.server.agent_runner import AgentRunner, reap_and_record, record_exits
 
 
 class FakeProcess:
@@ -51,7 +51,7 @@ async def test_spawn_passes_tokens_and_upstream_secrets_only_in_child_env(monkey
 
 
 @pytest.mark.asyncio
-async def test_reap_removes_exited_processes() -> None:
+async def test_exited_process_is_retained_until_explicitly_forgotten() -> None:
     process = FakeProcess()
 
     async def create_process(*_args: str, **_kwargs):
@@ -61,8 +61,13 @@ async def test_reap_removes_exited_processes() -> None:
     await runner.spawn("sess_123", {}, {})
     process.returncode = 1
 
-    assert await runner.reap_once() == {"sess_123": 1}
+    assert runner.exited() == {"sess_123": 1}
     assert runner.active_count() == 0
+    assert runner.exited() == {"sess_123": 1}
+
+    runner.forget({"sess_123": 1})
+
+    assert runner.exited() == {}
 
 
 @pytest.mark.asyncio
@@ -88,8 +93,15 @@ async def test_shutdown_terminates_and_clears_all_processes() -> None:
 @pytest.mark.asyncio
 async def test_reaper_records_ended_or_error_session_status() -> None:
     class Runner:
-        async def reap_once(self):
-            return {"sess_ok": 0, "sess_bad": 7}
+        def __init__(self) -> None:
+            self.pending = {"sess_ok": 0, "sess_bad": 7}
+
+        def exited(self):
+            return dict(self.pending)
+
+        def forget(self, rooms):
+            for room in rooms:
+                self.pending.pop(room)
 
     class Database:
         def __init__(self):
@@ -102,3 +114,45 @@ async def test_reaper_records_ended_or_error_session_status() -> None:
 
     assert await reap_and_record(Runner(), database) == 2
     assert database.calls == [("sess_ok", "ended"), ("sess_bad", "error")]
+
+
+@pytest.mark.asyncio
+async def test_reaper_retries_an_exit_when_status_persistence_fails() -> None:
+    process = FakeProcess()
+
+    async def create_process(*_args: str, **_kwargs):
+        return process
+
+    class FlakyDatabase:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def finish_session(self, _room: str, **_values) -> None:
+            self.attempts += 1
+            if self.attempts == 1:
+                raise RuntimeError("database temporarily unavailable")
+
+    runner = AgentRunner(process_factory=create_process)
+    database = FlakyDatabase()
+    await runner.spawn("sess_retry", {}, {})
+    process.returncode = 7
+
+    with pytest.raises(RuntimeError, match="temporarily unavailable"):
+        await reap_and_record(runner, database)
+
+    assert await reap_and_record(runner, database) == 1
+    assert await reap_and_record(runner, database) == 0
+    assert database.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_platform_initiated_shutdown_records_workers_as_ended() -> None:
+    calls = []
+
+    class Database:
+        async def finish_session(self, room: str, **values) -> None:
+            calls.append((room, values["status"]))
+
+    await record_exits(Database(), {"sess_terminated": -15}, forced_status="ended")
+
+    assert calls == [("sess_terminated", "ended")]

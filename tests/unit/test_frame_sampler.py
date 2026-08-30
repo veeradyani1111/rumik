@@ -66,7 +66,7 @@ async def test_motion_look_returns_recent_burst_in_capture_order() -> None:
     result = await look_task
 
     assert len(result.images) == 3
-    assert [frame.captured_at for frame in result.images] == [0.0, 0.2, 0.4]
+    assert [frame.captured_at for frame in result.images] == [0.2, 0.4, 0.4]
 
 
 @pytest.mark.asyncio

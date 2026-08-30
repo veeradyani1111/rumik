@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from contextlib import suppress
 import asyncio
 import json
+import logging
 from pathlib import Path
 import re
 
@@ -14,12 +15,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 from .accounts import AccountService, hash_api_key
-from .agent_runner import AgentRunner, reap_and_record
+from .agent_runner import AgentRunner, reap_and_record, record_exits
 from .broker import Broker, SessionRequest, SessionResponse
 from .config import Settings
 from .db import Database
 from .errors import InvalidKeyError, MissingKeyError, PlatformError, SessionNotFoundError
 from kyc.schema import KYCResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class SignupRequest(BaseModel):
@@ -62,7 +66,10 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
                 )
             async def reaper_loop() -> None:
                 while True:
-                    await reap_and_record(broker.runner, database)
+                    try:
+                        await reap_and_record(broker.runner, database)
+                    except Exception:
+                        logger.exception("Could not persist exited agent workers; will retry")
                     await asyncio.sleep(1)
 
             reaper_task = asyncio.create_task(reaper_loop(), name="agent-worker-reaper")
@@ -75,11 +82,10 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
                     with suppress(asyncio.CancelledError):
                         await reaper_task
                 shutdown_exits = await broker.runner.shutdown_all()
-                for room, return_code in shutdown_exits.items():
-                    await database.finish_session(
-                        room, status="ended" if return_code == 0 else "error"
-                    )
-                await database.close()
+                try:
+                    await record_exits(database, shutdown_exits, forced_status="ended")
+                finally:
+                    await database.close()
 
     app = FastAPI(title="Rumik Agent Platform", version="0.1.0", lifespan=lifespan)
     app.add_middleware(

@@ -59,13 +59,16 @@ class AgentRunner:
         self._processes[room] = process
         return process
 
-    async def reap_once(self) -> dict[str, int]:
-        exited: dict[str, int] = {}
-        for room, process in list(self._processes.items()):
-            if process.returncode is not None:
-                exited[room] = int(process.returncode)
-                self._processes.pop(room, None)
-        return exited
+    def exited(self) -> dict[str, int]:
+        return {
+            room: int(process.returncode)
+            for room, process in self._processes.items()
+            if process.returncode is not None
+        }
+
+    def forget(self, rooms: Mapping[str, int]) -> None:
+        for room in rooms:
+            self._processes.pop(room, None)
 
     async def shutdown_all(self) -> dict[str, int]:
         processes = dict(self._processes)
@@ -85,7 +88,15 @@ class AgentRunner:
 
 
 async def reap_and_record(runner: AgentRunner, database) -> int:
-    exited = await runner.reap_once()
-    for room, return_code in exited.items():
-        await database.finish_session(room, status="ended" if return_code == 0 else "error")
+    exited = runner.exited()
+    await record_exits(database, exited)
+    runner.forget(exited)
     return len(exited)
+
+
+async def record_exits(
+    database, exited: Mapping[str, int], *, forced_status: str | None = None
+) -> None:
+    for room, return_code in exited.items():
+        status = forced_status or ("ended" if return_code == 0 else "error")
+        await database.finish_session(room, status=status)

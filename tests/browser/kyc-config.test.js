@@ -14,7 +14,7 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
   const schema = config.tools.submitResult.parameters;
   assert.equal(schema.type, "object");
   assert.deepEqual(schema.required, ["decision", "checks", "extracted", "notes"]);
-  assert.equal(schema.properties.session_id.description, "Injected by the browser SDK event when omitted");
+  assert.equal(schema.properties.session_id, undefined);
   assert.deepEqual(schema.properties.checks.required, [
     "card_read",
     "hologram",

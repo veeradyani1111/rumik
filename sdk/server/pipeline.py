@@ -78,11 +78,6 @@ def build_context(config: AgentConfig) -> LLMContext:
     )
 
 
-def initial_agent_frame() -> LLMRunFrame:
-    """Trigger a prompt-aware opening turn once a participant joins."""
-    return LLMRunFrame()
-
-
 @dataclass(slots=True)
 class PipelineRuntime:
     pipeline: Pipeline
@@ -195,7 +190,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
 
     @transport.event_handler("on_first_participant_joined")
     async def greet(_transport, _participant_id: str):
-        await worker.queue_frame(initial_agent_frame())
+        await worker.queue_frame(LLMRunFrame())
 
     @transport.event_handler("on_participant_disconnected")
     async def participant_left(_transport, _participant_id: str):
