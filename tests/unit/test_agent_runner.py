@@ -21,6 +21,7 @@ class FakeProcess:
 
 @pytest.mark.asyncio
 async def test_spawn_passes_tokens_and_upstream_secrets_only_in_child_env(monkeypatch) -> None:
+    monkeypatch.setenv("APPDATA", r"C:\Users\developer\AppData\Roaming")
     monkeypatch.setenv("DATABASE_URL", "postgresql://platform-secret")
     monkeypatch.setenv("LIVEKIT_API_SECRET", "livekit-api-secret")
     monkeypatch.setenv("DEMO_PLATFORM_KEY", "rk_live_platform-secret")
@@ -44,6 +45,7 @@ async def test_spawn_passes_tokens_and_upstream_secrets_only_in_child_env(monkey
     assert "rumik-secret" not in command_line
     assert json.loads(kwargs["env"]["RUMIK_AGENT_CONFIG"])["agent_token"] == "livekit-secret-token"
     assert kwargs["env"]["OPENAI_API_KEY"] == "openai-secret"
+    assert kwargs["env"]["APPDATA"] == r"C:\Users\developer\AppData\Roaming"
     assert "DATABASE_URL" not in kwargs["env"]
     assert "LIVEKIT_API_SECRET" not in kwargs["env"]
     assert "DEMO_PLATFORM_KEY" not in kwargs["env"]

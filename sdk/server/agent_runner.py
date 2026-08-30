@@ -10,6 +10,7 @@ from typing import Any
 
 ProcessFactory = Callable[..., Awaitable[Any]]
 CHILD_ENV_ALLOWLIST = {
+    "APPDATA",
     "PATH",
     "PATHEXT",
     "SYSTEMROOT",
