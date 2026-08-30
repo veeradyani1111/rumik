@@ -107,8 +107,10 @@ class Database:
         query = """
             INSERT INTO kyc_results
                 (id, account_id, session_id, decision, checks, extracted, notes)
-            VALUES ($1, $2::uuid, $3, $4, $5::jsonb, $6::jsonb, $7)
-            RETURNING id
+            SELECT $1, sessions.account_id, sessions.id, $4, $5::jsonb, $6::jsonb, $7
+            FROM sessions
+            WHERE sessions.id = $3 AND sessions.account_id = $2::uuid
+            RETURNING kyc_results.id
         """
         async with self._require_pool().acquire() as connection:
             value = await connection.fetchval(
@@ -121,7 +123,9 @@ class Database:
                 json.dumps(extracted),
                 notes,
             )
-        return str(value or result_id)
+        if value is None:
+            raise LookupError("Session does not belong to the authenticated account")
+        return str(value)
 
     async def account_summary(self, account_id: str) -> dict:
         query = """

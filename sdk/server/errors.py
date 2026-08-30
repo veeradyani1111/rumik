@@ -28,3 +28,7 @@ class SpawnFailedError(PlatformError):
     def __init__(self) -> None:
         super().__init__("SPAWN_FAILED", "The agent worker could not be started.", 503)
 
+
+class SessionNotFoundError(PlatformError):
+    def __init__(self) -> None:
+        super().__init__("SESSION_NOT_FOUND", "The session does not belong to this account.", 404)

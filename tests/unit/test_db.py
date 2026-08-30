@@ -121,6 +121,8 @@ async def test_session_and_kyc_writes_are_tenant_scoped() -> None:
     queries = "\n".join(query for query, _args in pool.connection.executed)
     assert "INSERT INTO sessions" in queries
     assert "INSERT INTO kyc_results" in queries
+    assert "FROM sessions" in queries
+    assert "sessions.account_id" in queries
     assert queries.count("account_id") >= 2
 
 

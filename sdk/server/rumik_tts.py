@@ -6,6 +6,11 @@ from typing import Any
 from pipecat_rumik import RumikTTSService
 
 from .config import Settings
+from .tone_tags import sanitize
+
+
+async def _sanitize_for_tts(text: str, _aggregation_type: object) -> str:
+    return sanitize(text)
 
 
 def create_rumik_tts(
@@ -23,4 +28,5 @@ def create_rumik_tts(
         api_key=settings.rumik_api_key,
         gateway_url=settings.rumik_gateway_url,
         settings=service_settings,
+        text_transforms=[("*", _sanitize_for_tts)],
     )

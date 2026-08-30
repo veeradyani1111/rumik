@@ -36,6 +36,23 @@ def test_check_confidence_must_be_between_zero_and_one() -> None:
         CheckResult(status="pass", confidence=1.1, reasons=[])
 
 
+def test_kyc_result_rejects_decision_that_contradicts_checks() -> None:
+    passing = CheckResult(**_check("pass"))
+
+    with pytest.raises(ValidationError, match="does not match checks"):
+        KYCResult(
+            decision="fail",
+            checks=KYCChecks(
+                card_read=passing,
+                hologram=passing,
+                face_liveness=passing,
+                name_match=passing,
+            ),
+            extracted=ExtractedIdentity(),
+            session_id="sess_123",
+        )
+
+
 @pytest.mark.parametrize("statuses", list(product(("pass", "fail", "unclear"), repeat=4)))
 def test_decision_truth_table_for_every_check_combination(statuses: tuple[str, ...]) -> None:
     names = ("card_read", "hologram", "face_liveness", "name_match")

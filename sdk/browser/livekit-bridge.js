@@ -1,10 +1,4 @@
-import {
-  Room,
-  RoomEvent,
-  Track,
-  createLocalAudioTrack,
-  createLocalVideoTrack,
-} from "livekit-client";
+const LIVEKIT_BROWSER_MODULE = "https://cdn.jsdelivr.net/npm/livekit-client@2.22.1/+esm";
 
 
 export class LiveKitBridge {
@@ -12,9 +6,15 @@ export class LiveKitBridge {
     this.onState = onState;
     this.onData = onData;
     this.onAudioTrack = onAudioTrack;
-    this.room = new Room({ adaptiveStream: true, dynacast: true });
+    this.room = null;
+    this.client = null;
     this.localTracks = [];
+  }
 
+  async connect(url, token) {
+    this.client = await import(LIVEKIT_BROWSER_MODULE);
+    const { Room, RoomEvent, Track } = this.client;
+    this.room = new Room({ adaptiveStream: true, dynacast: true });
     this.room.on(RoomEvent.Reconnecting, () => this.onState("reconnecting"));
     this.room.on(RoomEvent.Reconnected, () => this.onState("live"));
     this.room.on(RoomEvent.Disconnected, () => this.onState("ended"));
@@ -28,21 +28,23 @@ export class LiveKitBridge {
     this.room.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) this.onAudioTrack(track);
     });
-  }
-
-  async connect(url, token) {
     await this.room.connect(url, token);
   }
 
   async publishMicrophone() {
-    const track = await createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true });
+    const track = await this.client.createLocalAudioTrack({
+      echoCancellation: true,
+      noiseSuppression: true,
+    });
     await this.room.localParticipant.publishTrack(track);
     this.localTracks.push(track);
     return track;
   }
 
   async publishCamera() {
-    const track = await createLocalVideoTrack({ resolution: { width: 1280, height: 720 } });
+    const track = await this.client.createLocalVideoTrack({
+      resolution: { width: 1280, height: 720 },
+    });
     await this.room.localParticipant.publishTrack(track);
     this.localTracks.push(track);
     return track;
@@ -56,7 +58,6 @@ export class LiveKitBridge {
   async disconnect() {
     for (const track of this.localTracks) track.stop();
     this.localTracks = [];
-    await this.room.disconnect();
+    await this.room?.disconnect();
   }
 }
-

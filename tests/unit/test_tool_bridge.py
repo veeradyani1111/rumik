@@ -36,6 +36,24 @@ def test_normalize_parameters_translates_the_developer_shorthand() -> None:
     }
 
 
+def test_normalize_parameters_preserves_full_json_schema_escape_hatch() -> None:
+    full_schema = {
+        "type": "object",
+        "properties": {
+            "checks": {
+                "type": "object",
+                "properties": {"card_read": {"type": "object"}},
+                "required": ["card_read"],
+                "additionalProperties": False,
+            }
+        },
+        "required": ["checks"],
+        "additionalProperties": False,
+    }
+
+    assert normalize_parameters(full_schema) == full_schema
+
+
 @pytest.mark.asyncio
 async def test_call_emits_id_and_matching_result_resolves() -> None:
     sent: list[dict] = []

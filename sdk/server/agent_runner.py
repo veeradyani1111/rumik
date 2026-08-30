@@ -9,6 +9,21 @@ from typing import Any
 
 
 ProcessFactory = Callable[..., Awaitable[Any]]
+CHILD_ENV_ALLOWLIST = {
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+}
 
 
 class AgentRunner:
@@ -27,7 +42,10 @@ class AgentRunner:
     ) -> Any:
         if room in self._processes and self._processes[room].returncode is None:
             raise RuntimeError(f"Agent already running for room {room}")
-        child_env = os.environ.copy()
+        child_env = {
+            key: value for key, value in os.environ.items() if key.upper() in CHILD_ENV_ALLOWLIST
+        }
+        child_env["PYTHONIOENCODING"] = "utf-8"
         child_env.update(secret_env)
         child_env["RUMIK_AGENT_CONFIG"] = json.dumps(dict(agent_config), separators=(",", ":"))
         process = await self._process_factory(
@@ -49,11 +67,25 @@ class AgentRunner:
                 self._processes.pop(room, None)
         return exited
 
-    async def shutdown_all(self) -> None:
-        processes = list(self._processes.values())
-        for process in processes:
+    async def shutdown_all(self) -> dict[str, int]:
+        processes = dict(self._processes)
+        for process in processes.values():
             if process.returncode is None:
                 process.terminate()
         if processes:
-            await asyncio.gather(*(process.wait() for process in processes), return_exceptions=True)
+            await asyncio.gather(
+                *(process.wait() for process in processes.values()), return_exceptions=True
+            )
+        exited = {
+            room: int(process.returncode if process.returncode is not None else -1)
+            for room, process in processes.items()
+        }
         self._processes.clear()
+        return exited
+
+
+async def reap_and_record(runner: AgentRunner, database) -> int:
+    exited = await runner.reap_once()
+    for room, return_code in exited.items():
+        await database.finish_session(room, status="ended" if return_code == 0 else "error")
+    return len(exited)

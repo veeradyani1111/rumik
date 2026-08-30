@@ -92,6 +92,13 @@ npm test
 
 The suite covers configuration clamps, key hashing/revocation, SQL adapter contracts, tenant-scoped broker behavior, JWT grants, process secret isolation, image throttling/downscaling/bursts/budgets, client-tool timeouts, tone tags, worker configuration, Pipecat construction, PAN/name/DOB logic, all 81 KYC decision combinations, and browser tool/payload behavior.
 
+The credential-backed Rumik smoke test is explicit opt-in so normal TDD runs stay fast and never spend credits accidentally:
+
+```powershell
+$env:RUN_LIVE_TESTS = "1"
+.venv\Scripts\python.exe -m pytest -q tests\integration\test_rumik_tts_live.py
+```
+
 ## Manual live checkpoint
 
 With `.env` configured:
@@ -116,4 +123,3 @@ See [NEXT-WEEK.md](NEXT-WEEK.md) for the production hardening path.
 ## Prompt log
 
 [PROMPTLOG.md](PROMPTLOG.md) is append-only and chronological. It records user-authored prompts, excludes secrets and injected environment/system metadata, and should be updated before each implementation turn. If you want a fully automatic log across tools, add an IDE/agent hook that appends the user message before dispatch; keep secret redaction in that hook.
-

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from dataclasses import dataclass
 from io import BytesIO
@@ -45,6 +46,7 @@ class FrameSampler(FrameProcessor):
         self._last_accept_at: float | None = None
         self._spend_timestamps: deque[float] = deque()
         self._last_encoded: SampledImage | None = None
+        self._new_frame_event = asyncio.Event()
         self.accepted_count = 0
         self.images_sent = 0
 
@@ -59,6 +61,7 @@ class FrameSampler(FrameProcessor):
         self._recent.append(capture)
         self._last_accept_at = now
         self.accepted_count += 1
+        self._new_frame_event.set()
         self._prune_recent(now)
         return True
 
@@ -78,7 +81,7 @@ class FrameSampler(FrameProcessor):
                 reused_last_frame=True,
             )
 
-        captures = self._captures_for_look(now, motion)
+        captures = await self._captures_for_look(motion)
         captures = captures[:remaining]
         encoded = [self._encode(capture) for capture in captures]
         for _frame in encoded:
@@ -99,13 +102,26 @@ class FrameSampler(FrameProcessor):
             return
         await self.push_frame(frame, direction)
 
-    def _captures_for_look(self, now: float, motion: bool) -> list[RawCapture]:
+    async def _captures_for_look(self, motion: bool) -> list[RawCapture]:
         if not motion:
             return [self.latest_raw] if self.latest_raw else []
-        self._prune_recent(now)
-        captures = list(self._recent)[-self.policy.burst_count :]
-        if not captures and self.latest_raw:
-            captures = [self.latest_raw]
+        captures = [self.latest_raw] if self.latest_raw else []
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + (self.policy.burst_window_ms / 1000)
+        observed_count = self.accepted_count
+        self._new_frame_event.clear()
+        while len(captures) < self.policy.burst_count:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(self._new_frame_event.wait(), timeout=remaining)
+            except TimeoutError:
+                break
+            self._new_frame_event.clear()
+            if self.accepted_count > observed_count and self.latest_raw is not None:
+                captures.append(self.latest_raw)
+                observed_count = self.accepted_count
         while captures and len(captures) < self.policy.burst_count:
             captures.append(captures[-1])
         return captures

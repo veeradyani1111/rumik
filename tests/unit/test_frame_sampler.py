@@ -1,3 +1,5 @@
+import asyncio
+
 from PIL import Image
 import pytest
 
@@ -50,13 +52,18 @@ async def test_single_look_returns_one_downscaled_jpeg() -> None:
 async def test_motion_look_returns_recent_burst_in_capture_order() -> None:
     clock = FakeClock()
     sampler = FrameSampler(
-        SamplePolicy(max_fps=10, burst_count=3, burst_window_ms=1000), clock=clock
+        SamplePolicy(max_fps=10, burst_count=3, burst_window_ms=100), clock=clock
     )
-    for timestamp, color in ((0.0, "red"), (0.2, "green"), (0.4, "blue")):
-        clock.value = timestamp
-        sampler.accept_image(image(color))
+    sampler.accept_image(image("red"))
 
-    result = await sampler.look(reason="check motion", motion=True)
+    look_task = asyncio.create_task(sampler.look(reason="check motion", motion=True))
+    await asyncio.sleep(0)
+    clock.value = 0.2
+    sampler.accept_image(image("green"))
+    await asyncio.sleep(0)
+    clock.value = 0.4
+    sampler.accept_image(image("blue"))
+    result = await look_task
 
     assert len(result.images) == 3
     assert [frame.captured_at for frame in result.images] == [0.0, 0.2, 0.4]
@@ -64,7 +71,9 @@ async def test_motion_look_returns_recent_burst_in_capture_order() -> None:
 
 @pytest.mark.asyncio
 async def test_motion_look_reuses_latest_when_stream_is_slow() -> None:
-    sampler = FrameSampler(SamplePolicy(burst_count=3), clock=FakeClock())
+    sampler = FrameSampler(
+        SamplePolicy(burst_count=3, burst_window_ms=10), clock=FakeClock()
+    )
     sampler.accept_image(image())
 
     result = await sampler.look(reason="check motion", motion=True)

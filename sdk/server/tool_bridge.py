@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import inspect
 import json
 from collections.abc import Awaitable, Callable, Mapping
@@ -11,7 +12,11 @@ from uuid import uuid4
 SendPayload = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 
-def _value_schema(specification: str) -> dict[str, Any]:
+def _value_schema(specification: Any) -> dict[str, Any]:
+    if isinstance(specification, Mapping):
+        if "type" in specification:
+            return deepcopy(dict(specification))
+        return normalize_parameters(specification)
     spec = specification.strip()
     primitives = {
         "string": {"type": "string"},
@@ -37,7 +42,12 @@ def _value_schema(specification: str) -> dict[str, Any]:
     return {"type": "string", "description": spec}
 
 
-def normalize_parameters(parameters: Mapping[str, str]) -> dict[str, Any]:
+def normalize_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    if parameters.get("type") == "object" and isinstance(parameters.get("properties"), Mapping):
+        schema = deepcopy(dict(parameters))
+        schema.setdefault("required", list(schema["properties"]))
+        schema.setdefault("additionalProperties", False)
+        return schema
     names = list(parameters)
     return {
         "type": "object",
@@ -47,7 +57,7 @@ def normalize_parameters(parameters: Mapping[str, str]) -> dict[str, Any]:
     }
 
 
-def tool_definition(name: str, description: str, parameters: Mapping[str, str]) -> dict[str, Any]:
+def tool_definition(name: str, description: str, parameters: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "type": "function",
         "function": {

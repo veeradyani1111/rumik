@@ -1,26 +1,37 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from contextlib import suppress
+import asyncio
 import json
 from pathlib import Path
+import re
 
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .accounts import AccountService, hash_api_key
-from .agent_runner import AgentRunner
+from .agent_runner import AgentRunner, reap_and_record
 from .broker import Broker, SessionRequest, SessionResponse
 from .config import Settings
 from .db import Database
-from .errors import InvalidKeyError, MissingKeyError, PlatformError
+from .errors import InvalidKeyError, MissingKeyError, PlatformError, SessionNotFoundError
 from kyc.schema import KYCResult
 
 
 class SignupRequest(BaseModel):
     email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if len(normalized) > 320 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+            raise ValueError("email must be a valid address")
+        return normalized
 
 
 def _bearer_key(authorization: str | None) -> str | None:
@@ -42,17 +53,32 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        reaper_task = None
         if owns_dependencies:
             await database.connect()
             if settings.demo_platform_key:
                 await database.ensure_demo_key(
                     "demo@local.invalid", hash_api_key(settings.demo_platform_key)
                 )
+            async def reaper_loop() -> None:
+                while True:
+                    await reap_and_record(broker.runner, database)
+                    await asyncio.sleep(1)
+
+            reaper_task = asyncio.create_task(reaper_loop(), name="agent-worker-reaper")
         try:
             yield
         finally:
             if owns_dependencies:
-                await broker.runner.shutdown_all()
+                if reaper_task is not None:
+                    reaper_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await reaper_task
+                shutdown_exits = await broker.runner.shutdown_all()
+                for room, return_code in shutdown_exits.items():
+                    await database.finish_session(
+                        room, status="ended" if return_code == 0 else "error"
+                    )
                 await database.close()
 
     app = FastAPI(title="Rumik Agent Platform", version="0.1.0", lifespan=lifespan)
@@ -98,14 +124,17 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
         if account_id is None:
             raise InvalidKeyError()
         data = payload.model_dump(mode="json")
-        await database.save_kyc_result(
-            account_id=account_id,
-            session_id=payload.session_id,
-            decision=payload.decision,
-            checks=data["checks"],
-            extracted=data["extracted"],
-            notes=payload.notes,
-        )
+        try:
+            await database.save_kyc_result(
+                account_id=account_id,
+                session_id=payload.session_id,
+                decision=payload.decision,
+                checks=data["checks"],
+                extracted=data["extracted"],
+                notes=payload.notes,
+            )
+        except LookupError as exc:
+            raise SessionNotFoundError() from exc
         logs_dir = Path("kyc/logs")
         logs_dir.mkdir(parents=True, exist_ok=True)
         (logs_dir / f"{payload.session_id}.json").write_text(

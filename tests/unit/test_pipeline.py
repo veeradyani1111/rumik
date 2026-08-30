@@ -1,5 +1,7 @@
 from sdk.server.config import Settings
-from sdk.server.pipeline import AgentConfig, build_context, build_pipeline
+from pipecat.frames.frames import LLMRunFrame
+
+from sdk.server.pipeline import AgentConfig, build_context, build_pipeline, initial_agent_frame
 
 
 def test_agent_config_rejects_extra_worker_payload_fields() -> None:
@@ -50,9 +52,14 @@ def test_context_combines_developer_prompt_tone_contract_and_tools() -> None:
     assert context.messages[0]["role"] == "system"
     assert "Be helpful." in context.messages[0]["content"]
     assert "[neutral]" in context.messages[0]["content"]
+    assert "proactively greet" in context.messages[0]["content"]
     schemas = context.tools.standard_tools
     assert [schema.name for schema in schemas] == ["look", "submitResult"]
     assert schemas[1].properties["decision"]["enum"] == ["pass", "fail", "needs_review"]
+
+
+def test_initial_agent_frame_runs_the_llm_against_the_developer_prompt() -> None:
+    assert isinstance(initial_agent_frame(), LLMRunFrame)
 
 
 def test_pipeline_builds_all_services_without_connecting_to_network() -> None:

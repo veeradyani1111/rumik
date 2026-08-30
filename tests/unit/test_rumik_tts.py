@@ -1,3 +1,5 @@
+import asyncio
+
 from pipecat_rumik import RumikTTSService
 
 from sdk.server.config import Settings
@@ -22,3 +24,17 @@ def test_factory_maps_platform_and_session_voice_settings() -> None:
     assert service._settings.model == "mulberry"
     assert service._settings.voice == "speaker_2"
     assert service._settings.description == "warm and concise"
+
+
+def test_factory_sanitizes_aggregated_text_before_synthesis() -> None:
+    settings = Settings(
+        _env_file=None,
+        rumik_api_key="rumik-key",
+        rumik_gateway_url="https://rumik.example",
+    )
+
+    service = create_rumik_tts(settings)
+    aggregation_type, transform = service._text_transforms[0]
+
+    assert aggregation_type == "*"
+    assert asyncio.run(transform("**Result** 1234", "sentence")) == '[neutral] Result "1234"'

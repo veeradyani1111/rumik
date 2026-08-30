@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
@@ -23,7 +24,7 @@ class ToolSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     description: str = Field(min_length=1)
-    parameters: dict[str, str] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class SessionRequest(BaseModel):
@@ -56,6 +57,7 @@ class Broker:
         self.database = database
         self.runner = runner
         self._room_factory = room_factory or (lambda: f"sess_{uuid4().hex[:12]}")
+        self._session_lock = asyncio.Lock()
 
     async def create_session(self, platform_key: str | None, request: SessionRequest) -> SessionResponse:
         if not platform_key:
@@ -63,9 +65,12 @@ class Broker:
         account_id = await self.accounts.validate(platform_key)
         if account_id is None:
             raise InvalidKeyError()
-        if self.runner.active_count() >= self.settings.max_concurrent_sessions:
-            raise BusyError()
+        async with self._session_lock:
+            if self.runner.active_count() >= self.settings.max_concurrent_sessions:
+                raise BusyError()
+            return await self._start_session(account_id, request)
 
+    async def _start_session(self, account_id: str, request: SessionRequest) -> SessionResponse:
         room = self._room_factory()
         token_args = {
             "api_key": self.settings.livekit_api_key,
@@ -103,14 +108,14 @@ class Broker:
             "RUMIK_API_KEY": self.settings.rumik_api_key,
             "RUMIK_GATEWAY_URL": self.settings.rumik_gateway_url,
         }
-        try:
-            await self.runner.spawn(room, agent_config, secrets)
-        except Exception as exc:
-            raise SpawnFailedError() from exc
         await self.database.create_session(
             session_id=room,
             account_id=account_id,
             mode="vision" if request.vision else "audio",
         )
+        try:
+            await self.runner.spawn(room, agent_config, secrets)
+        except Exception as exc:
+            await self.database.finish_session(room, status="error")
+            raise SpawnFailedError() from exc
         return SessionResponse(url=self.settings.livekit_url, token=user_token, room=room)
-

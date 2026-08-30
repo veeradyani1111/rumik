@@ -17,6 +17,49 @@ Follow these steps in order:
 Never claim the visual liveness checks are tamper-proof. Put that limitation in notes.
 `.trim();
 
+const CHECK_SCHEMA = {
+  type: "object",
+  properties: {
+    status: { type: "string", enum: ["pass", "fail", "unclear"] },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    reasons: { type: "array", items: { type: "string" } },
+  },
+  required: ["status", "confidence", "reasons"],
+  additionalProperties: false,
+};
+
+const RESULT_SCHEMA = {
+  type: "object",
+  properties: {
+    decision: { type: "string", enum: ["pass", "fail", "needs_review"] },
+    checks: {
+      type: "object",
+      properties: {
+        card_read: CHECK_SCHEMA,
+        hologram: CHECK_SCHEMA,
+        face_liveness: CHECK_SCHEMA,
+        name_match: CHECK_SCHEMA,
+      },
+      required: ["card_read", "hologram", "face_liveness", "name_match"],
+      additionalProperties: false,
+    },
+    extracted: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        pan: { type: "string" },
+        dob: { type: "string" },
+      },
+      required: ["name", "pan", "dob"],
+      additionalProperties: false,
+    },
+    session_id: { type: "string", description: "Injected by the browser SDK event when omitted" },
+    notes: { type: "string" },
+  },
+  required: ["decision", "checks", "extracted", "notes"],
+  additionalProperties: false,
+};
+
 
 export function createKycConfig({ fetch: fetchImpl = globalThis.fetch, onResult = () => {} } = {}) {
   let sessionId = "";
@@ -31,15 +74,10 @@ export function createKycConfig({ fetch: fetchImpl = globalThis.fetch, onResult 
     tools: {
       submitResult: {
         description: "Persist and display the final structured KYC decision",
-        parameters: {
-          decision: "pass | fail | needs_review",
-          checks: "object",
-          extracted: "{ name: string, pan: string, dob: string }",
-          session_id: "string",
-          notes: "string",
-        },
+        parameters: RESULT_SCHEMA,
         async handler(result) {
-          const normalizedResult = { ...result, session_id: result.session_id || sessionId };
+          if (!sessionId) throw new Error("Session ID is not available yet");
+          const normalizedResult = { ...result, session_id: sessionId };
           const response = await fetchImpl("/kyc-result", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

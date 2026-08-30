@@ -11,6 +11,16 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
   assert.match(KYC_PROMPT, /look.*motion=true/is);
   assert.match(KYC_PROMPT, /submitResult/);
   assert.deepEqual(Object.keys(config.tools), ["submitResult", "validatePan"]);
+  const schema = config.tools.submitResult.parameters;
+  assert.equal(schema.type, "object");
+  assert.deepEqual(schema.required, ["decision", "checks", "extracted", "notes"]);
+  assert.equal(schema.properties.session_id.description, "Injected by the browser SDK event when omitted");
+  assert.deepEqual(schema.properties.checks.required, [
+    "card_read",
+    "hologram",
+    "face_liveness",
+    "name_match",
+  ]);
 });
 
 
@@ -24,9 +34,11 @@ test("submitResult persists through the developer proxy before rendering", async
     },
     onResult: (result) => rendered.push(result),
   });
-  const result = { decision: "pass", session_id: "sess_1" };
+  config.onEvent({ type: "session_started", room: "sess_actual" });
+  const result = { decision: "pass", session_id: "sess_hallucinated" };
 
   assert.deepEqual(await config.tools.submitResult.handler(result), { stored: true });
-  assert.deepEqual(calls, [["/kyc-result", result]]);
-  assert.deepEqual(rendered, [result]);
+  const expected = { decision: "pass", session_id: "sess_actual" };
+  assert.deepEqual(calls, [["/kyc-result", expected]]);
+  assert.deepEqual(rendered, [expected]);
 });

@@ -7,15 +7,15 @@ from typing import Any
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import TTSSpeakFrame
+from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAISTTService
 from pipecat.transports.livekit.transport import LiveKitParams, LiveKitTransport
+from pipecat.workers.runner import WorkerRunner
 from pydantic import BaseModel, ConfigDict, Field
 
 from .config import SamplePolicy, Settings
@@ -29,7 +29,7 @@ class WorkerTool(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
     description: str
-    parameters: dict[str, str] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentConfig(BaseModel):
@@ -67,11 +67,20 @@ def build_context(config: AgentConfig) -> LLMContext:
                 required=schema["required"],
             )
         )
-    system_prompt = f"{config.prompt.strip()}\n\n{SYSTEM_PROMPT_FRAGMENT}"
+    system_prompt = (
+        f"{config.prompt.strip()}\n\n"
+        "When the session starts, proactively greet the user and begin the requested workflow.\n\n"
+        f"{SYSTEM_PROMPT_FRAGMENT}"
+    )
     return LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=tools),
     )
+
+
+def initial_agent_frame() -> LLMRunFrame:
+    """Trigger a prompt-aware opening turn once a participant joins."""
+    return LLMRunFrame()
 
 
 @dataclass(slots=True)
@@ -85,7 +94,7 @@ class PipelineRuntime:
     bridge: ClientToolBridge
 
     async def run(self) -> None:
-        await PipelineRunner(handle_sigint=False).run(self.worker)
+        await WorkerRunner(handle_sigint=False).run(self.worker)
 
 
 def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
@@ -186,7 +195,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
 
     @transport.event_handler("on_first_participant_joined")
     async def greet(_transport, _participant_id: str):
-        await worker.queue_frame(TTSSpeakFrame("[neutral] Hello! How can I help you today?"))
+        await worker.queue_frame(initial_agent_frame())
 
     @transport.event_handler("on_participant_disconnected")
     async def participant_left(_transport, _participant_id: str):

@@ -7,10 +7,11 @@
 ## SDK pressure discovered while building KYC
 
 - KYC needs both a single read and a multi-frame motion view. Keeping those behind one `look({motion})` tool is workable, but an explicit developer-side `requestLook()` would make deterministic state machines easier.
-- The friendly `name: "type-or-description"` tool schema is excellent for shallow tools and weak for a deeply nested KYC result. The SDK accepts `object`, while the server-side Pydantic model remains the strict final validator. A full JSON Schema escape hatch belongs in the next version.
+- The friendly `name: "type-or-description"` shorthand remains useful for shallow tools. Deep tools can now pass a full JSON Schema; KYC uses that path while the server-side Pydantic model independently validates the final result.
 - A tool result needs the platform session ID. The generic SDK now emits `session_started` with the room so the KYC configuration can attach it without reaching into LiveKit internals.
 - Keeping images “for this turn only” required lifecycle-aware cleanup after the assistant turn. This is intentionally centralized in the pipeline rather than left to every application prompt.
 
 ## Known incomplete live evidence
 
 - The repository arrived without `.env`, so no honest credential-backed OpenAI/Rumik/LiveKit/Neon run or screen recording could be performed during this implementation session. Offline construction and contract tests pass; the live checklist is in the README.
+- `/health` currently reports credential/configuration readiness and the local worker count. It deliberately does not claim that upstream services are reachable; active dependency probes remain a follow-up.
