@@ -19,3 +19,12 @@ This append-only log records user-authored prompts given to the coding agent in 
 ## 004 — 2026-08-30
 
 > okay. please start the sdk and the kyc app. also put the envs in place and i will populate them with values.
+
+## 005 — 2026-08-30
+
+> RUMIK_GATEWAY_URL get from rumik docs please
+> also why does kyc need a rumik key, livekit pipecat all those keys? it shd just need the platform key. ukwim? im so cnfused
+
+## 006 — 2026-08-30
+
+> yes please. thank you
