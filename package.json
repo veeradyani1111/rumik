@@ -1,0 +1,13 @@
+{
+  "name": "rumik-agent-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/browser/*.test.js"
+  },
+  "dependencies": {
+    "livekit-client": "2.22.1"
+  }
+}
+

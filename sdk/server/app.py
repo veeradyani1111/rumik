@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
+from pathlib import Path
 
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .accounts import AccountService
+from .accounts import AccountService, hash_api_key
 from .agent_runner import AgentRunner
 from .broker import Broker, SessionRequest, SessionResponse
 from .config import Settings
 from .db import Database
-from .errors import PlatformError
+from .errors import InvalidKeyError, MissingKeyError, PlatformError
+from kyc.schema import KYCResult
 
 
 class SignupRequest(BaseModel):
@@ -40,6 +44,10 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
     async def lifespan(_app: FastAPI):
         if owns_dependencies:
             await database.connect()
+            if settings.demo_platform_key:
+                await database.ensure_demo_key(
+                    "demo@local.invalid", hash_api_key(settings.demo_platform_key)
+                )
         try:
             yield
         finally:
@@ -80,6 +88,72 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
     @app.post("/session", response_model=SessionResponse)
     async def session(payload: SessionRequest, authorization: str | None = Header(default=None)):
         return await broker.create_session(_bearer_key(authorization), payload)
+
+    @app.post("/kyc-result", status_code=201)
+    async def kyc_result(payload: KYCResult, authorization: str | None = Header(default=None)):
+        platform_key = _bearer_key(authorization)
+        if not platform_key:
+            raise MissingKeyError()
+        account_id = await accounts.validate(platform_key)
+        if account_id is None:
+            raise InvalidKeyError()
+        data = payload.model_dump(mode="json")
+        await database.save_kyc_result(
+            account_id=account_id,
+            session_id=payload.session_id,
+            decision=payload.decision,
+            checks=data["checks"],
+            extracted=data["extracted"],
+            notes=payload.notes,
+        )
+        logs_dir = Path("kyc/logs")
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        (logs_dir / f"{payload.session_id}.json").write_text(
+            json.dumps(data, indent=2), encoding="utf-8"
+        )
+        return {"stored": True, "session_id": payload.session_id}
+
+    @app.get("/account")
+    async def account(authorization: str | None = Header(default=None)):
+        platform_key = _bearer_key(authorization)
+        if not platform_key:
+            raise MissingKeyError()
+        account_id = await accounts.validate(platform_key)
+        if account_id is None:
+            raise InvalidKeyError()
+        return await database.account_summary(account_id)
+
+    @app.post("/keys/regenerate", status_code=201)
+    async def regenerate_key(authorization: str | None = Header(default=None)):
+        platform_key = _bearer_key(authorization)
+        if not platform_key:
+            raise MissingKeyError()
+        account_id = await accounts.validate(platform_key)
+        if account_id is None:
+            raise InvalidKeyError()
+        issued = await accounts.regenerate(account_id)
+        return {"account_id": issued.account_id, "api_key": issued.api_key}
+
+    @app.post("/keys/revoke")
+    async def revoke_key(authorization: str | None = Header(default=None)):
+        platform_key = _bearer_key(authorization)
+        if not platform_key:
+            raise MissingKeyError()
+        account_id = await accounts.validate(platform_key)
+        if account_id is None:
+            raise InvalidKeyError()
+        return {"revoked": await accounts.revoke(account_id, platform_key)}
+
+    repository_root = Path(__file__).resolve().parents[2]
+    sdk_assets = repository_root / "sdk" / "browser"
+    docs_assets = repository_root / "web" / "docs"
+    web_assets = repository_root / "web"
+    if sdk_assets.is_dir():
+        app.mount("/sdk", StaticFiles(directory=sdk_assets), name="sdk")
+    if docs_assets.is_dir():
+        app.mount("/docs", StaticFiles(directory=docs_assets, html=True), name="docs")
+    if web_assets.is_dir():
+        app.mount("/", StaticFiles(directory=web_assets, html=True), name="web")
 
     return app
 

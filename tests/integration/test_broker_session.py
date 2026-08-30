@@ -14,6 +14,12 @@ class FakeAccounts:
     async def signup(self, email: str):
         return type("Issued", (), {"account_id": "account-1", "api_key": "rk_live_once"})()
 
+    async def regenerate(self, account_id: str):
+        return type("Issued", (), {"account_id": account_id, "api_key": "rk_live_fresh"})()
+
+    async def revoke(self, account_id: str, api_key: str):
+        return account_id == "account-1" and api_key == "rk_live_valid"
+
 
 class FakeDatabase:
     def __init__(self) -> None:
@@ -21,6 +27,12 @@ class FakeDatabase:
 
     async def create_session(self, **values) -> None:
         self.sessions.append(values)
+
+    async def save_kyc_result(self, **values) -> None:
+        self.kyc_result = values
+
+    async def account_summary(self, account_id: str):
+        return {"email": "dev@example.com", "keys": [], "session_count": 1, "kyc_count": 0}
 
 
 class FakeRunner:
@@ -131,3 +143,58 @@ async def test_signup_returns_plaintext_key_once() -> None:
 
     assert response.status_code == 201
     assert response.json() == {"account_id": "account-1", "api_key": "rk_live_once"}
+
+
+@pytest.mark.asyncio
+async def test_kyc_result_requires_key_and_persists_structured_result() -> None:
+    client, _runner, database = make_client()
+    result = {
+        "decision": "needs_review",
+        "checks": {
+            name: {"status": "unclear", "confidence": 0.4, "reasons": ["not clear"]}
+            for name in ("card_read", "hologram", "face_liveness", "name_match")
+        },
+        "extracted": {"name": "", "pan": "", "dob": ""},
+        "session_id": "sess_fixed",
+        "notes": "Heuristic only.",
+    }
+    async with client:
+        missing = await client.post("/kyc-result", json=result)
+        stored = await client.post(
+            "/kyc-result",
+            headers={"Authorization": "Bearer rk_live_valid"},
+            json=result,
+        )
+
+    assert missing.status_code == 401
+    assert stored.status_code == 201
+    assert stored.json() == {"stored": True, "session_id": "sess_fixed"}
+    assert database.kyc_result["account_id"] == "account-1"
+    assert database.kyc_result["decision"] == "needs_review"
+
+
+@pytest.mark.asyncio
+async def test_account_endpoint_is_authenticated_and_tenant_scoped() -> None:
+    client, _runner, _database = make_client()
+    async with client:
+        response = await client.get(
+            "/account", headers={"Authorization": "Bearer rk_live_valid"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "dev@example.com"
+    assert response.json()["session_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_regenerate_and_revoke_key_endpoints_require_current_key() -> None:
+    client, _runner, _database = make_client()
+    headers = {"Authorization": "Bearer rk_live_valid"}
+    async with client:
+        regenerated = await client.post("/keys/regenerate", headers=headers)
+        revoked = await client.post("/keys/revoke", headers=headers)
+
+    assert regenerated.status_code == 201
+    assert regenerated.json()["api_key"] == "rk_live_fresh"
+    assert revoked.status_code == 200
+    assert revoked.json() == {"revoked": True}

@@ -18,6 +18,7 @@ def _value_schema(specification: str) -> dict[str, Any]:
         "number": {"type": "number"},
         "integer": {"type": "integer"},
         "boolean": {"type": "boolean"},
+        "object": {"type": "object"},
     }
     if spec in primitives:
         return primitives[spec]

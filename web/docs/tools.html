@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tools — Rumik Agent</title><link rel="stylesheet" href="docs.css"></head><body><nav><a href="./">Docs</a><a href="configuration.html">Configuration</a></nav><main><h1>Tools</h1><h2>Built-in: look</h2><p><code>look({reason, motion})</code> runs in the worker. A single look reads the latest frame; motion mode uses a short recent burst. Raw video is never fire-hosed into the model.</p><h2>Client tools</h2><pre><code>tools: {
+  saveTicket: {
+    description: "Save the support ticket",
+    parameters: { subject: "string", priority: "low | high" },
+    handler: async (args) => api.save(args),
+  }
+}</code></pre><p>Only the schema crosses the session API. The handler remains in the developer page. Calls and results travel over the room data channel and time out after 15 seconds.</p></main></body></html>

@@ -43,9 +43,10 @@ class AccountService:
         if EMAIL_PATTERN.fullmatch(normalized_email) is None:
             raise ValueError("Enter a valid email address")
         account_id = await self._repository.get_or_create_account(normalized_email)
-        plaintext = mint_api_key()
-        await self._repository.create_api_key(account_id, hash_api_key(plaintext), label)
-        return IssuedKey(account_id=account_id, api_key=plaintext)
+        return await self._issue(account_id, label=label)
+
+    async def regenerate(self, account_id: str, *, label: str = "regenerated") -> IssuedKey:
+        return await self._issue(account_id, label=label)
 
     async def validate(self, api_key: str) -> str | None:
         if not api_key:
@@ -54,3 +55,8 @@ class AccountService:
 
     async def revoke(self, account_id: str, api_key: str) -> bool:
         return await self._repository.revoke_api_key(account_id, hash_api_key(api_key))
+
+    async def _issue(self, account_id: str, *, label: str) -> IssuedKey:
+        plaintext = mint_api_key()
+        await self._repository.create_api_key(account_id, hash_api_key(plaintext), label)
+        return IssuedKey(account_id=account_id, api_key=plaintext)

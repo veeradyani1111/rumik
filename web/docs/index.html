@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rumik Agent Docs</title><link rel="stylesheet" href="docs.css"></head><body><nav><a href="/">Platform</a><a href="./">Quickstart</a><a href="configuration.html">Configuration</a><a href="tools.html">Tools</a><a href="kyc-example.html">KYC</a><a href="errors.html">Errors</a></nav><main><h1>One key. A prompt. Your tools.</h1><p>Rumik Agent is a browser SDK backed by a server-side voice and vision pipeline. Upstream secrets never enter the browser.</p><h2>Quickstart</h2><ol><li>Get a platform key from the platform home page.</li><li>Keep it on your server and proxy <code>/session</code> to the broker.</li><li>Mount the agent.</li></ol><pre><code>import { RumikAgent } from "/sdk/rumik-agent.js";
+
+const agent = RumikAgent.create({
+  session: "/session",
+  vision: true,
+  prompt: "You are a warm, concise assistant.",
+});
+await agent.mount("#agent");</code></pre><p class="note">A platform key is a secret. Never embed it in client JavaScript. The browser receives only a short-lived, room-scoped LiveKit token.</p></main></body></html>

@@ -84,3 +84,16 @@ async def test_signup_rejects_invalid_email() -> None:
 
     with pytest.raises(ValueError, match="valid email"):
         await service.signup("not-an-email")
+
+
+@pytest.mark.asyncio
+async def test_regenerate_issues_an_additional_key_for_authenticated_account() -> None:
+    repository = FakeAccountRepository()
+    service = AccountService(repository)
+    issued = await service.signup("dev@example.com")
+
+    regenerated = await service.regenerate(issued.account_id)
+
+    assert regenerated.account_id == issued.account_id
+    assert regenerated.api_key != issued.api_key
+    assert len(repository.keys) == 2

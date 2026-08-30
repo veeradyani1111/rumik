@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Rumik Agent — Hello</title>
+  <link rel="stylesheet" href="/sdk/rumik-agent.css">
+  <script type="importmap">{"imports":{"livekit-client":"https://cdn.jsdelivr.net/npm/livekit-client@2.22.1/+esm"}}</script>
+  <style>body{max-width:760px;margin:4rem auto;padding:0 1rem;background:#07111e;color:#e9f2ff;font:16px system-ui}button{padding:.75rem 1rem}</style>
+</head>
+<body>
+  <h1>Hello, seeing agent</h1>
+  <p>The developer supplies one prompt; the SDK owns media, transport, speech, vision, and playback.</p>
+  <button id="start">Start agent</button><button id="stop">Stop</button>
+  <div id="agent"></div>
+  <script type="module">
+    import { RumikAgent } from "/sdk/rumik-agent.js";
+    let agent;
+    document.querySelector("#start").onclick = async () => {
+      agent = RumikAgent.create({session:"/session",vision:true,prompt:"You are a warm, concise assistant. Greet the user and help them.",onError:console.error});
+      await agent.mount("#agent");
+    };
+    document.querySelector("#stop").onclick = () => agent?.stop();
+  </script>
+</body>
+</html>
+

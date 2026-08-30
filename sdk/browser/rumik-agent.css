@@ -1,0 +1,20 @@
+.rumik-agent {
+  display: grid;
+  gap: 0.75rem;
+  color: #ecf4ff;
+}
+
+.rumik-agent__preview {
+  width: 100%;
+  max-height: 32rem;
+  border-radius: 1rem;
+  background: #08111f;
+  object-fit: cover;
+}
+
+.rumik-agent__status {
+  margin: 0;
+  color: #8fa7c1;
+  font: 500 0.85rem/1.4 system-ui, sans-serif;
+  text-transform: capitalize;
+}

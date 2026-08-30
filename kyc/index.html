@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Rumik Video KYC</title>
+  <link rel="stylesheet" href="/sdk/rumik-agent.css">
+  <script type="importmap">{"imports":{"livekit-client":"https://cdn.jsdelivr.net/npm/livekit-client@2.22.1/+esm"}}</script>
+  <style>body{margin:0;background:#07111e;color:#ecf4ff;font:16px system-ui}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(18rem,1fr);gap:1.5rem;max-width:1100px;margin:auto;padding:2rem}main,aside{background:#0d1b2c;border:1px solid #20364f;border-radius:1rem;padding:1.25rem}button{padding:.8rem 1rem;border:0;border-radius:.7rem;background:#5eead4;color:#05201d;font-weight:700}.decision{font-size:2rem;text-transform:uppercase}@media(max-width:760px){.layout{grid-template-columns:1fr}}</style>
+</head>
+<body>
+  <div class="layout"><main><h1>Video KYC demo</h1><p>Have a PAN card ready. Camera-based liveness is heuristic and not production-grade.</p><button id="start">Start verification</button><div id="agent"></div></main><aside><h2>Result</h2><div id="result">Not completed.</div></aside></div>
+  <script type="module">
+    import { RumikAgent } from "/sdk/rumik-agent.js";
+    import { createKycConfig } from "./kyc-config.js";
+    const result = document.querySelector("#result");
+    document.querySelector("#start").onclick = async (event) => {
+      event.currentTarget.disabled = true;
+      const config = createKycConfig({onResult(value){result.replaceChildren();const decision=document.createElement("p");decision.className="decision";decision.textContent=value.decision;const details=document.createElement("pre");details.textContent=JSON.stringify(value,null,2);result.append(decision,details);}});
+      const agent = RumikAgent.create({...config,onError(error){result.textContent=error.message;event.currentTarget.disabled=false;}});
+      await agent.mount("#agent");
+    };
+  </script>
+</body>
+</html>
+

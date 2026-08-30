@@ -21,6 +21,15 @@ class FakeConnection:
             return "account-id"
         return "key-id"
 
+    async def fetchrow(self, query: str, *args: object):
+        self.executed.append((query, args))
+        return {
+            "email": "dev@example.com",
+            "keys": [{"id": "key-1", "label": "default", "masked": "rk_live_••••"}],
+            "session_count": 3,
+            "kyc_count": 1,
+        }
+
 
 class AcquireContext:
     def __init__(self, connection: FakeConnection) -> None:
@@ -88,3 +97,65 @@ async def test_account_repository_queries_use_hashes_and_return_account() -> Non
 
 def test_schema_file_is_next_to_database_adapter() -> None:
     assert Path("sdk/server/schema.sql").is_file()
+
+
+@pytest.mark.asyncio
+async def test_session_and_kyc_writes_are_tenant_scoped() -> None:
+    pool = FakePool()
+
+    async def create_pool(_url: str):
+        return pool
+
+    database = Database("postgresql://test", pool_factory=create_pool)
+    await database.connect()
+    await database.create_session(session_id="sess_1", account_id="account-id", mode="vision")
+    await database.save_kyc_result(
+        account_id="account-id",
+        session_id="sess_1",
+        decision="needs_review",
+        checks={"card_read": {"status": "unclear"}},
+        extracted={"name": ""},
+        notes="camera unavailable",
+    )
+
+    queries = "\n".join(query for query, _args in pool.connection.executed)
+    assert "INSERT INTO sessions" in queries
+    assert "INSERT INTO kyc_results" in queries
+    assert queries.count("account_id") >= 2
+
+
+@pytest.mark.asyncio
+async def test_account_summary_returns_masked_keys_and_usage_counts() -> None:
+    pool = FakePool()
+
+    async def create_pool(_url: str):
+        return pool
+
+    database = Database("postgresql://test", pool_factory=create_pool)
+    await database.connect()
+
+    summary = await database.account_summary("account-id")
+
+    assert summary["email"] == "dev@example.com"
+    assert summary["keys"][0]["masked"] == "rk_live_••••"
+    assert summary["session_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_demo_key_seed_is_idempotent_and_hash_only() -> None:
+    pool = FakePool()
+
+    async def create_pool(_url: str):
+        return pool
+
+    database = Database("postgresql://test", pool_factory=create_pool)
+    await database.connect()
+
+    account_id = await database.ensure_demo_key("demo@local.invalid", "demo-key-sha256")
+
+    assert account_id == "account-id"
+    queries = "\n".join(query for query, _args in pool.connection.executed)
+    args = [arg for _query, values in pool.connection.executed for arg in values]
+    assert "ON CONFLICT (key_hash)" in queries
+    assert "demo-key-sha256" in args
+    assert "rk_live_demo" not in args
