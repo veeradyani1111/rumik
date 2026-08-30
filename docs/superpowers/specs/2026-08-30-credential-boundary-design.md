@@ -1,5 +1,7 @@
 # Credential Boundary Design
 
+> **Status: superseded.** The user chose a single root `.env` because the whole repository will be deployed together. The retained boundary is behavioral: `kyc/server.py` reads only `PLATFORM_URL` and `DEMO_PLATFORM_KEY`; provider and database variables are consumed only by the platform code.
+
 ## Goal
 
 Make the local demo match the platform's intended one-key developer experience. The KYC application must receive only its platform URL and platform API key. OpenAI, Rumik, LiveKit, and database credentials must remain exclusive to the platform process.
