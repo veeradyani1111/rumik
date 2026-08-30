@@ -41,3 +41,7 @@ This append-only log records user-authored prompts given to the coding agent in 
 ## 009 — 2026-08-30
 
 > ok now turn both on so i can use
+
+## 010 — 2026-08-30
+
+> [Screenshot showing the KYC page error: "Failed to execute 'fetch' on 'Window': Illegal invocation"]

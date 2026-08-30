@@ -43,7 +43,8 @@ class AgentController {
     if (!config?.session) throw new TypeError("session URL is required");
     if (!config?.prompt?.trim()) throw new TypeError("prompt is required");
     this.config = config;
-    this.fetch = dependencies.fetch ?? globalThis.fetch;
+    const fetchImpl = dependencies.fetch ?? globalThis.fetch;
+    this.fetch = (...args) => fetchImpl.call(globalThis, ...args);
     this.document = dependencies.document ?? globalThis.document;
     this.Bridge = dependencies.Bridge ?? LiveKitBridge;
     this.bridge = null;
@@ -145,7 +146,7 @@ class AgentController {
 
 
 export const RumikAgent = {
-  create(config) {
-    return new AgentController(config);
+  create(config, dependencies) {
+    return new AgentController(config, dependencies);
   },
 };

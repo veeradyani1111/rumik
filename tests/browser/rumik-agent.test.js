@@ -1,7 +1,47 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSessionPayload, runToolHandler } from "../../sdk/browser/rumik-agent.js";
+import { RumikAgent, buildSessionPayload, runToolHandler } from "../../sdk/browser/rumik-agent.js";
+
+
+function fakeElement() {
+  return {
+    append() {},
+    replaceChildren() {},
+    textContent: "",
+    hidden: false,
+  };
+}
+
+
+test("RumikAgent keeps browser fetch bound to the global owner", async () => {
+  const root = fakeElement();
+  const document = {
+    querySelector: () => root,
+    createElement: () => fakeElement(),
+  };
+  let fetchOwner;
+  function browserFetch() {
+    fetchOwner = this;
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ url: "wss://livekit.example", token: "token", room: "room" }),
+    });
+  }
+  class Bridge {
+    async connect() {}
+    async publishMicrophone() { return {}; }
+  }
+  const agent = RumikAgent.create(
+    { session: "/session", prompt: "Help the user.", vision: false },
+    { fetch: browserFetch, document, Bridge },
+  );
+
+  await agent.mount("#agent");
+
+  assert.equal(fetchOwner, globalThis);
+});
 
 
 test("buildSessionPayload sends schemas but never browser handlers", () => {
