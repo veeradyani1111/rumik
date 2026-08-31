@@ -107,6 +107,10 @@ class Broker:
             "OPENAI_API_KEY": self.settings.openai_api_key,
             "RUMIK_API_KEY": self.settings.rumik_api_key,
             "RUMIK_GATEWAY_URL": self.settings.rumik_gateway_url,
+            # Propagate the configured TTS voice to the worker. Without this the
+            # worker falls back to the code default model and never honours .env.
+            "RUMIK_TTS_MODEL": self.settings.rumik_tts_model,
+            "RUMIK_TTS_SPEAKER": self.settings.rumik_tts_speaker,
         }
         await self.database.create_session(
             session_id=room,

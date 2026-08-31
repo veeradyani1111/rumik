@@ -1,1 +1,113 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rumik Agent Platform</title><link rel="stylesheet" href="/docs/docs.css"></head><body><nav><a href="/">Rumik Agent</a><a href="/docs/">Docs</a></nav><main><h1>Give your page a voice and eyes.</h1><p>One platform key hides OpenAI, Rumik, and LiveKit behind a prompt-first browser SDK.</p><form id="signup"><label>Email <input required type="email" name="email"></label> <button>Get API key</button></form><pre id="key" hidden></pre><p class="note">The key is displayed once. Keep it in your server environment, never in browser source.</p><script>document.querySelector('#signup').onsubmit=async e=>{e.preventDefault();const email=new FormData(e.currentTarget).get('email');const r=await fetch('/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const p=await r.json();const out=document.querySelector('#key');out.hidden=false;out.textContent=r.ok?p.api_key:(p.message||JSON.stringify(p));};</script></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Rumik Agent Platform</title>
+  <link rel="stylesheet" href="/docs/docs.css">
+  <style>
+    main{max-width:1080px}
+    .hero{display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:2.5rem; align-items:start}
+    @media(max-width:820px){.hero{grid-template-columns:1fr}}
+    .eyebrow{display:inline-flex; align-items:center; gap:.5rem; font-family:var(--mono); font-size:.78rem; font-weight:600;
+      color:var(--teal); background:rgba(63,224,197,.08); border:1px solid rgba(63,224,197,.25); padding:.35rem .7rem; border-radius:999px; margin-bottom:1.1rem}
+    .hero p.lead{font-size:1.15rem; max-width:52ch}
+    .features{list-style:none; padding:0; margin:1.6rem 0 0; display:grid; gap:.85rem}
+    .features li{display:flex; gap:.7rem; align-items:flex-start; color:#c7cde6; font-size:.96rem}
+    .features li b{color:var(--text); font-weight:600}
+    .features .mk{flex:0 0 auto; width:1.5rem; height:1.5rem; border-radius:7px; display:grid; place-items:center; margin-top:.05rem;
+      background:linear-gradient(140deg,rgba(124,108,255,.25),rgba(63,224,197,.2)); border:1px solid var(--border-strong); color:var(--teal); font-size:.8rem}
+    .snippet{margin-top:2rem}
+    .snippet .cap{font-family:var(--mono); font-size:.75rem; color:var(--muted); margin:0 0 .5rem; text-transform:uppercase; letter-spacing:.08em}
+
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--border);
+      border-radius:18px; padding:1.5rem; box-shadow:0 30px 60px -40px rgba(0,0,0,.8); position:sticky; top:5rem}
+    .card h2{margin:0 0 .3rem; font-size:1.2rem}
+    .card .sub{margin:0 0 1.2rem; font-size:.9rem}
+    form{display:grid; gap:.7rem}
+    label{display:grid; gap:.4rem; font-size:.82rem; font-weight:600; color:var(--muted)}
+    input{width:100%; padding:.8rem .9rem; border-radius:11px; border:1px solid var(--border-strong);
+      background:#0a0d18; color:var(--text); font-family:var(--font); font-size:.95rem}
+    input:focus{outline:none; border-color:var(--violet); box-shadow:0 0 0 3px rgba(124,108,255,.25)}
+    button{padding:.85rem 1rem; border:0; border-radius:11px; cursor:pointer; font-family:var(--font); font-weight:700; font-size:.98rem;
+      color:#fff; background:linear-gradient(140deg,var(--violet),#5b8cff); box-shadow:0 14px 28px -14px var(--violet); transition:filter .15s}
+    button:hover{filter:brightness(1.08)}
+    #key{margin:1rem 0 0; font-size:.8rem; word-break:break-all; white-space:pre-wrap}
+    .safety{margin:1rem 0 0; font-size:.78rem; color:var(--muted); display:flex; gap:.5rem; align-items:flex-start}
+    .safety svg{flex:0 0 auto; margin-top:.1rem; color:var(--teal)}
+    .links{margin-top:1.3rem; display:flex; gap:1.2rem; font-size:.88rem}
+  </style>
+</head>
+<body>
+  <nav><a href="/">Rumik Agent</a><a href="/docs/">Docs</a><a href="/dashboard.html">Dashboard</a></nav>
+  <main>
+    <section class="hero">
+      <div>
+        <span class="eyebrow">◆ prompt-first browser SDK</span>
+        <h1>Give your page a voice and eyes.</h1>
+        <p class="lead">One platform key hides OpenAI, Rumik, and LiveKit behind an agent that talks, listens, and sees on demand — and calls the browser tools you own.</p>
+        <ul class="features">
+          <li><span class="mk">◈</span><span><b>One key, zero leaks.</b> Your server holds the platform key; the browser only ever sees a short-lived room token.</span></li>
+          <li><span class="mk">⌘</span><span><b>Your tools stay yours.</b> Handlers run in the page; only their schemas cross to the agent.</span></li>
+          <li><span class="mk">◎</span><span><b>Vision on demand.</b> The agent samples a frame only when it needs to look — with a per-minute budget.</span></li>
+        </ul>
+        <div class="snippet">
+          <p class="cap">Drop-in usage</p>
+          <pre><code>const agent = RumikAgent.create({
+  session: "/session",
+  vision: true,
+  prompt: "You are a warm, concise assistant.",
+  tools: {
+    saveTicket: {
+      description: "Save a support ticket",
+      parameters: { subject: "string", priority: "low | high" },
+      handler: async (args) =&gt; saveTicket(args),
+    },
+  },
+});
+await agent.mount("#agent");</code></pre>
+        </div>
+      </div>
+
+      <aside class="card">
+        <h2>Get your API key</h2>
+        <p class="sub">Email-only signup for the dev sandbox. The key is shown once.</p>
+        <form id="signup">
+          <label>Work email
+            <input required type="email" name="email" placeholder="you@company.com">
+          </label>
+          <button>Generate key</button>
+        </form>
+        <pre id="key" hidden></pre>
+        <p class="safety">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/></svg>
+          Keep it in your server environment, never in browser source.
+        </p>
+        <div class="links">
+          <a href="/docs/">Read the docs →</a>
+          <a href="/dashboard.html">Dashboard →</a>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script>
+    document.querySelector('#signup').onsubmit = async (e) => {
+      e.preventDefault();
+      const email = new FormData(e.currentTarget).get('email');
+      const btn = e.currentTarget.querySelector('button');
+      btn.disabled = true; btn.textContent = 'Generating…';
+      try {
+        const r = await fetch('/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const p = await r.json();
+        const out = document.querySelector('#key');
+        out.hidden = false;
+        out.textContent = r.ok ? p.api_key : (p.message || JSON.stringify(p));
+      } catch (err) {
+        const out = document.querySelector('#key'); out.hidden = false; out.textContent = String(err);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Generate key';
+      }
+    };
+  </script>
+</body>
+</html>

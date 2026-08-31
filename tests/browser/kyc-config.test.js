@@ -20,6 +20,7 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
     "hologram",
     "face_liveness",
     "name_match",
+    "face_match",
   ]);
 });
 

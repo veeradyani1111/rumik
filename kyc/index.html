@@ -1,22 +1,247 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Rumik Video KYC</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Rumik · Video KYC</title>
   <link rel="stylesheet" href="/sdk/rumik-agent.css">
-  <style>body{margin:0;background:#07111e;color:#ecf4ff;font:16px system-ui}.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(18rem,1fr);gap:1.5rem;max-width:1100px;margin:auto;padding:2rem}main,aside{background:#0d1b2c;border:1px solid #20364f;border-radius:1rem;padding:1.25rem}button{padding:.8rem 1rem;border:0;border-radius:.7rem;background:#5eead4;color:#05201d;font-weight:700}.decision{font-size:2rem;text-transform:uppercase}@media(max-width:760px){.layout{grid-template-columns:1fr}}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --font: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+      --bg1:#eef3fb; --bg2:#e7edf7;
+      --surface:#ffffff; --surface-2:#f7f9fd;
+      --border:#e2e8f2; --border-strong:#d3dcea;
+      --text:#132135; --muted:#5c6b82;
+      --primary:#0d9488; --primary-strong:#0b7d73; --primary-soft:#d6f3ef;
+      --accent:#4f46e5; --accent-soft:#e7e6fb;
+      --ok:#16a34a; --ok-soft:#dcfce7; --warn:#b45309; --warn-soft:#fef3c7; --danger:#dc2626;
+      --radius:18px; --radius-sm:12px;
+      --shadow:0 18px 40px -24px rgba(19,33,53,.35);
+      /* theme the embedded SDK component for this light page */
+      --rumik-fg:#132135; --rumik-muted:#5c6b82;
+      --rumik-video-bg:#0b1220; --rumik-video-border:#d3dcea; --rumik-radius:14px;
+      --rumik-note-bg:#fef3c7; --rumik-note-border:#f3d38a; --rumik-note-fg:#8a5a06;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0}
+    body{
+      font-family:var(--font); color:var(--text);
+      background:
+        radial-gradient(1100px 600px at 85% -8%, #dbeef0 0%, transparent 55%),
+        radial-gradient(900px 500px at -5% 0%, #e6e5fb 0%, transparent 45%),
+        linear-gradient(180deg,var(--bg1),var(--bg2));
+      min-height:100vh; -webkit-font-smoothing:antialiased;
+    }
+    a{color:var(--primary)}
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:1rem;
+      padding:1.1rem clamp(1rem,4vw,2.5rem); max-width:1120px; margin:0 auto;
+    }
+    .brand{display:flex; align-items:center; gap:.6rem; font-weight:800; letter-spacing:-.02em; font-size:1.15rem}
+    .brand .dot{width:1.6rem; height:1.6rem; border-radius:.55rem; display:grid; place-items:center;
+      background:linear-gradient(140deg,var(--primary),#22b8a6); color:#fff; font-size:.95rem; box-shadow:0 6px 16px -6px var(--primary)}
+    .brand small{display:block; font-weight:600; font-size:.72rem; color:var(--muted); letter-spacing:.02em}
+    .chip{font-size:.74rem; font-weight:600; color:var(--warn); background:var(--warn-soft);
+      border:1px solid #f3d38a; padding:.35rem .7rem; border-radius:999px}
+    .wrap{max-width:1120px; margin:0 auto; padding:0 clamp(1rem,4vw,2.5rem) 3rem}
+    .hero{padding:1.5rem 0 2rem}
+    .hero h1{font-size:clamp(1.9rem,4.5vw,2.9rem); line-height:1.05; letter-spacing:-.03em; margin:.2rem 0 .5rem}
+    .hero p{color:var(--muted); font-size:1.05rem; max-width:46ch; margin:0}
+    .grid{display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:1.25rem; align-items:start}
+    @media(max-width:860px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow)}
+    .card.pad{padding:1.35rem}
+    .stage{padding:1.1rem}
+    .stage__bar{display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.9rem}
+    .stage__bar h2{margin:0; font-size:1rem; letter-spacing:-.01em}
+    .pill{display:inline-flex; align-items:center; gap:.45rem; font-size:.8rem; font-weight:600;
+      color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:.35rem .7rem; border-radius:999px}
+    .pill .led{width:.55rem; height:.55rem; border-radius:50%; background:#c3ccda; box-shadow:0 0 0 3px #eef1f6}
+    .pill[data-tone="live"]{color:var(--ok); background:var(--ok-soft); border-color:#bbf7d0}
+    .pill[data-tone="live"] .led{background:var(--ok); box-shadow:0 0 0 3px #d6f7de; animation:pulse 1.6s infinite}
+    .pill[data-tone="busy"]{color:var(--accent); background:var(--accent-soft); border-color:#d5d3f7}
+    .pill[data-tone="busy"] .led{background:var(--accent); box-shadow:0 0 0 3px #e7e6fb}
+    .pill[data-tone="warn"]{color:var(--warn); background:var(--warn-soft); border-color:#f3d38a}
+    .pill[data-tone="warn"] .led{background:var(--warn)}
+    .pill[data-tone="error"]{color:var(--danger); background:#fee2e2; border-color:#fecaca}
+    .pill[data-tone="error"] .led{background:var(--danger)}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    .videoframe{position:relative; border-radius:14px; overflow:hidden; background:#0b1220}
+    #agent{min-height:280px}
+    .placeholder{position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:1.5rem;
+      color:#a9b6c9; font-weight:500; pointer-events:none}
+    .placeholder svg{width:44px; height:44px; opacity:.7; margin-bottom:.6rem}
+    .cta{margin-top:1rem; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
+      padding:.95rem 1.1rem; border:0; border-radius:14px; cursor:pointer;
+      background:linear-gradient(140deg,var(--primary),#18a99a); color:#fff; font-family:var(--font);
+      font-weight:700; font-size:1.02rem; box-shadow:0 14px 26px -14px var(--primary); transition:transform .06s ease, filter .15s ease}
+    .cta:hover{filter:brightness(1.05)}
+    .cta:active{transform:translateY(1px)}
+    .cta:disabled{opacity:.55; cursor:default; filter:grayscale(.2)}
+    .enroll{display:grid; grid-template-columns:1.4fr .9fr 1fr; gap:.7rem; margin-bottom:1rem}
+    @media(max-width:560px){.enroll{grid-template-columns:1fr}}
+    .enroll label{display:grid; gap:.3rem; font-size:.72rem; font-weight:700; letter-spacing:.02em; color:var(--muted); text-transform:uppercase}
+    .enroll input{font-family:var(--font); font-size:.92rem; color:var(--text); background:var(--surface-2);
+      border:1px solid var(--border-strong); border-radius:10px; padding:.6rem .7rem}
+    .enroll input:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft)}
+    .enroll input[name="pan"]{text-transform:uppercase}
+    .enroll input:disabled{opacity:.6}
+    .side{display:grid; gap:1.25rem}
+    .side h3{margin:0 0 .9rem; font-size:.95rem; letter-spacing:-.01em}
+    .steps{list-style:none; margin:0; padding:0; display:grid; gap:.65rem}
+    .steps li{display:flex; gap:.7rem; align-items:flex-start; padding:.55rem .6rem; border-radius:12px; transition:background .2s}
+    .steps li .n{flex:0 0 auto; width:1.6rem; height:1.6rem; border-radius:50%; display:grid; place-items:center;
+      font-size:.82rem; font-weight:700; color:var(--muted); background:var(--surface-2); border:1px solid var(--border)}
+    .steps li .t{font-size:.9rem; color:var(--text)}
+    .steps li .t small{display:block; color:var(--muted); font-weight:500; font-size:.8rem; margin-top:.1rem}
+    .steps li[data-active]{background:var(--primary-soft)}
+    .steps li[data-active] .n{background:var(--primary); color:#fff; border-color:var(--primary)}
+    .result{font-size:.92rem; color:var(--muted)}
+    .result .decision{font-size:1.6rem; font-weight:800; letter-spacing:-.02em; text-transform:capitalize; margin:.1rem 0 .5rem}
+    .result .decision[data-d="pass"]{color:var(--ok)} .result .decision[data-d="fail"]{color:var(--danger)}
+    .result .decision[data-d="needs_review"]{color:var(--warn)}
+    .result pre{white-space:pre-wrap; word-break:break-word; background:var(--surface-2); border:1px solid var(--border);
+      border-radius:12px; padding:.8rem; font-size:.78rem; color:#33465f; max-height:280px; overflow:auto; margin:.3rem 0 0}
+    .foot{color:var(--muted); font-size:.8rem; margin-top:1.5rem; text-align:center}
+  </style>
 </head>
 <body>
-  <div class="layout"><main><h1>Video KYC demo</h1><p>Have a PAN card ready. Camera-based liveness is heuristic and not production-grade.</p><button id="start">Start verification</button><div id="agent"></div></main><aside><h2>Result</h2><div id="result">Not completed.</div></aside></div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot">◈</span>
+      <span>Rumik <small>Secure Video KYC</small></span>
+    </div>
+    <span class="chip">Demo · heuristic checks</span>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Let's verify your identity</h1>
+      <p>A friendly agent will guide you on camera through a few quick checks. It takes about a minute — have your PAN card ready.</p>
+    </section>
+
+    <div class="grid">
+      <section class="card stage">
+        <div class="stage__bar">
+          <h2>Live verification</h2>
+          <span class="pill" id="statusPill"><span class="led"></span><span id="statusText">Ready</span></span>
+        </div>
+        <form id="enroll" class="enroll" autocomplete="off">
+          <label>Full name<input name="name" type="text" placeholder="As printed on your PAN"></label>
+          <label>Date of birth<input name="dob" type="date"></label>
+          <label>PAN number<input name="pan" type="text" placeholder="ABCDE1234F" maxlength="10"></label>
+        </form>
+        <div class="videoframe">
+          <div id="agent"></div>
+          <div class="placeholder" id="placeholder">
+            <div>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.5-2.5v9L15 14M4 6h9a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
+              <div>Camera preview appears here once you start</div>
+            </div>
+          </div>
+        </div>
+        <button id="start" class="cta">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Start verification
+        </button>
+      </section>
+
+      <aside class="side">
+        <div class="card pad">
+          <h3>What we'll do</h3>
+          <ol class="steps" id="steps">
+            <li data-step="card"><span class="n">1</span><span class="t">Read your PAN card<small>Hold it steady toward the camera</small></span></li>
+            <li data-step="hologram"><span class="n">2</span><span class="t">Check the hologram<small>Tilt the card side to side</small></span></li>
+            <li data-step="liveness"><span class="n">3</span><span class="t">Quick liveness check<small>Blink or turn your head when asked</small></span></li>
+            <li data-step="face"><span class="n">4</span><span class="t">Face match<small>Hold the card next to your face</small></span></li>
+            <li data-step="match"><span class="n">5</span><span class="t">Match your details<small>Card is checked against what you entered</small></span></li>
+          </ol>
+        </div>
+        <div class="card pad">
+          <h3>Result</h3>
+          <div class="result" id="result">Not completed yet.</div>
+        </div>
+      </aside>
+    </div>
+
+    <p class="foot">Your camera and microphone are used only for this verification session. Visual liveness checks are heuristic and can be defeated by a determined attacker.</p>
+  </main>
+
   <script type="module">
     import { RumikAgent } from "/sdk/rumik-agent.js";
     import { createKycConfig } from "./kyc-config.js";
+
     const result = document.querySelector("#result");
-    document.querySelector("#start").onclick = async (event) => {
-      event.currentTarget.disabled = true;
-      const config = createKycConfig({onResult(value){result.replaceChildren();const decision=document.createElement("p");decision.className="decision";decision.textContent=value.decision;const details=document.createElement("pre");details.textContent=JSON.stringify(value,null,2);result.append(decision,details);}});
-      const agent = RumikAgent.create({...config,onError(error){result.textContent=error.message;event.currentTarget.disabled=false;}});
-      await agent.mount("#agent");
+    const startButton = document.querySelector("#start");
+    const statusPill = document.querySelector("#statusPill");
+    const statusText = document.querySelector("#statusText");
+    const placeholder = document.querySelector("#placeholder");
+    const enroll = document.querySelector("#enroll");
+
+    function setStatus(text, tone) {
+      statusText.textContent = text;
+      if (tone) statusPill.dataset.tone = tone; else statusPill.removeAttribute("data-tone");
+    }
+
+    function renderResult(value) {
+      result.replaceChildren();
+      const decision = document.createElement("p");
+      decision.className = "decision";
+      decision.dataset.d = value.decision;
+      decision.textContent = String(value.decision || "").replace("_", " ");
+      const details = document.createElement("pre");
+      details.textContent = JSON.stringify(value, null, 2);
+      result.append(decision, details);
+    }
+
+    // The KYC agent decides its own pace; we highlight steps heuristically from
+    // the on-page hints so the person always sees roughly where they are.
+    function handleEvent(event) {
+      switch (event?.type) {
+        case "connecting": setStatus("Connecting…", "busy"); break;
+        case "mic_started": setStatus("Microphone on", "busy"); break;
+        case "camera_started": setStatus("Camera on — get ready", "live"); placeholder.hidden = true; break;
+        case "camera_unavailable": setStatus("Camera blocked", "warn"); break;
+        case "agent_audio": setStatus("Agent is speaking", "live"); break;
+        case "live": setStatus("Live — the agent is listening", "live"); break;
+        case "ended": setStatus("Session ended"); break;
+        case "tool_call":
+          if (event.name === "submitResult") setStatus("Finishing up…", "busy");
+          break;
+      }
+    }
+
+    startButton.onclick = async () => {
+      startButton.disabled = true;
+      setStatus("Starting…", "busy");
+      const fd = new FormData(enroll);
+      const expected = {
+        name: (fd.get("name") || "").toString().trim(),
+        dob: (fd.get("dob") || "").toString().trim(),
+        pan: (fd.get("pan") || "").toString().trim(),
+      };
+      // Lock the claimed identity for the session so it can't change mid-call.
+      for (const el of enroll.elements) el.disabled = true;
+      const config = createKycConfig({ onResult: renderResult, expected });
+      const innerOnEvent = config.onEvent;
+      const agent = RumikAgent.create({
+        ...config,
+        onEvent(event) { innerOnEvent?.(event); handleEvent(event); },
+        onError(error) {
+          setStatus("Error", "error");
+          result.textContent = error?.message ?? "Something went wrong.";
+          startButton.disabled = false;
+          for (const el of enroll.elements) el.disabled = false;
+        },
+      });
+      try {
+        await agent.mount("#agent");
+      } catch (error) {
+        console.warn("KYC session did not start:", error?.message ?? error);
+      }
     };
   </script>
 </body>

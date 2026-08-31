@@ -26,6 +26,8 @@ def load_worker_config(room: str, environ: Mapping[str, str]) -> tuple[AgentConf
         openai_api_key=environ.get("OPENAI_API_KEY", ""),
         rumik_api_key=environ.get("RUMIK_API_KEY", ""),
         rumik_gateway_url=environ.get("RUMIK_GATEWAY_URL", ""),
+        rumik_tts_model=environ.get("RUMIK_TTS_MODEL", "muga"),
+        rumik_tts_speaker=environ.get("RUMIK_TTS_SPEAKER", "speaker_1"),
         llm_model=config.llm_model,
         stt_model=config.stt_model,
     )

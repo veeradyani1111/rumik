@@ -1,20 +1,32 @@
 .rumik-agent {
   display: grid;
   gap: 0.75rem;
-  color: #ecf4ff;
+  color: var(--rumik-fg, #ecf4ff);
 }
 
 .rumik-agent__preview {
   width: 100%;
+  aspect-ratio: 16 / 10;
   max-height: 32rem;
-  border-radius: 1rem;
-  background: #08111f;
+  border-radius: var(--rumik-radius, 1rem);
+  border: 1px solid var(--rumik-video-border, transparent);
+  background: var(--rumik-video-bg, #08111f);
   object-fit: cover;
+  transform: scaleX(-1); /* mirror self-view so it feels like a mirror */
+}
+
+.rumik-agent__note {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--rumik-radius, 0.6rem);
+  background: var(--rumik-note-bg, #3a1720);
+  border: 1px solid var(--rumik-note-border, #7a2a3a);
+  color: var(--rumik-note-fg, #ffd7de);
+  font: 500 0.85rem/1.4 system-ui, sans-serif;
 }
 
 .rumik-agent__status {
   margin: 0;
-  color: #8fa7c1;
+  color: var(--rumik-muted, #8fa7c1);
   font: 500 0.85rem/1.4 system-ui, sans-serif;
-  text-transform: capitalize;
 }

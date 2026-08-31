@@ -23,6 +23,7 @@ class KYCChecks(StrictModel):
     hologram: CheckResult
     face_liveness: CheckResult
     name_match: CheckResult
+    face_match: CheckResult
 
 
 class ExtractedIdentity(StrictModel):

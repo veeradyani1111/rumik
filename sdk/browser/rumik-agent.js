@@ -47,6 +47,7 @@ class AgentController {
     this.fetch = (...args) => fetchImpl.call(globalThis, ...args);
     this.document = dependencies.document ?? globalThis.document;
     this.Bridge = dependencies.Bridge ?? LiveKitBridge;
+    this.console = dependencies.console ?? globalThis.console ?? { info: noop, warn: noop, error: noop };
     this.bridge = null;
     this.elements = {};
     this.stopped = false;
@@ -57,6 +58,7 @@ class AgentController {
     if (!root) throw new TypeError("mount target was not found");
     this._render(root);
     this._state("connecting");
+    this._emit({ type: "connecting" });
 
     try {
       const response = await this.fetch(this.config.session, {
@@ -66,16 +68,25 @@ class AgentController {
       });
       const session = await response.json();
       if (!response.ok) throw Object.assign(new Error(session.message ?? "Session failed"), session);
-      this.config.onEvent?.({ type: "session_started", room: session.room });
+      this._log("info", "session created", { room: session.room });
+      this._emit({ type: "session_started", room: session.room });
 
       this.bridge = new this.Bridge({
         onState: (state) => this._state(state),
         onData: (payload) => this._onData(payload),
-        onAudioTrack: (track) => track.attach(this.elements.audio),
+        onAudioTrack: (track) => {
+          this._log("info", "agent audio track subscribed");
+          this._emit({ type: "agent_audio" });
+          track.attach(this.elements.audio);
+        },
       });
       await this.bridge.connect(session.url, session.token);
+      this._log("info", "connected to room", { room: session.room });
+
       try {
         await this.bridge.publishMicrophone();
+        this._log("info", "microphone published");
+        this._emit({ type: "mic_started" });
       } catch (cause) {
         const error = Object.assign(new Error("Microphone permission is required"), {
           code: "mic_required",
@@ -85,15 +96,21 @@ class AgentController {
         await this.stop();
         throw error;
       }
+
       if (this.config.vision) {
         try {
           const camera = await this.bridge.publishCamera();
           camera.attach(this.elements.video);
-        } catch {
-          this.config.onEvent?.({ type: "camera_unavailable" });
+          this._log("info", "camera published and attached");
+          this._note("");
+          this._emit({ type: "camera_started" });
+        } catch (cause) {
+          this._cameraUnavailable(cause);
         }
       }
+
       this._state("live");
+      this._emit({ type: "live" });
       return this;
     } catch (error) {
       if (error.code !== "mic_required") this._error(error);
@@ -106,11 +123,13 @@ class AgentController {
     this.stopped = true;
     await this.bridge?.disconnect();
     this._state("ended");
+    this._emit({ type: "ended" });
   }
 
   async _onData(payload) {
-    this.config.onEvent?.(payload);
+    this._emit(payload);
     if (payload?.type !== "tool_call") return;
+    this._log("info", "tool call", { name: payload.name });
     const result = await runToolHandler(this.config.tools ?? {}, payload);
     await this.bridge.sendData(result);
   }
@@ -126,23 +145,64 @@ class AgentController {
     video.hidden = !this.config.vision;
     const audio = this.document.createElement("audio");
     audio.autoplay = true;
+    const note = this.document.createElement("p");
+    note.className = "rumik-agent__note";
+    note.hidden = true;
     const status = this.document.createElement("p");
     status.className = "rumik-agent__status";
-    shell.append(video, audio, status);
+    shell.append(video, audio, note, status);
     root.replaceChildren(shell);
-    this.elements = { shell, video, audio, status };
+    this.elements = { shell, video, audio, note, status };
   }
 
   _state(state) {
-    if (this.elements.status) this.elements.status.textContent = state;
+    const label = STATUS_LABELS[state] ?? state;
+    if (this.elements.status) this.elements.status.textContent = label;
     (this.config.onState ?? noop)(state);
   }
 
+  _note(text) {
+    const el = this.elements.note;
+    if (!el) return;
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+  _cameraUnavailable(cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause ?? "");
+    this._log("warn", "camera unavailable", { reason });
+    this._note("Camera is blocked or unavailable. Allow camera access, then restart. KYC needs the camera to read your card.");
+    this._emit({ type: "camera_unavailable", reason });
+  }
+
+  _emit(event) {
+    try {
+      (this.config.onEvent ?? noop)(event);
+    } catch (error) {
+      this._log("error", "onEvent handler threw", { error: String(error) });
+    }
+  }
+
+  _log(level, message, detail) {
+    const fn = this.console[level] ?? this.console.info ?? noop;
+    fn.call(this.console, `[rumik-agent] ${message}`, detail ?? "");
+  }
+
   _error(error) {
+    this._log("error", "session error", { message: error?.message, code: error?.code });
     (this.config.onError ?? noop)(error);
     this._state("error");
   }
 }
+
+
+const STATUS_LABELS = {
+  connecting: "Connecting…",
+  live: "Live — the agent is listening",
+  reconnecting: "Reconnecting…",
+  ended: "Session ended",
+  error: "Something went wrong",
+};
 
 
 export const RumikAgent = {

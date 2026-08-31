@@ -66,9 +66,13 @@ CheckStatus = Literal["pass", "fail", "unclear"]
 
 def decide(checks: Mapping[str, Mapping[str, object]]) -> Literal["pass", "fail", "needs_review"]:
     statuses = {name: check.get("status") for name, check in checks.items()}
-    if statuses.get("card_read") == "fail" or statuses.get("name_match") == "fail":
+    # A confident failure on identity, the claim match, or the face-on-card match
+    # is a hard reject. Heuristic checks stay "unclear" when not confident, which
+    # routes to human review rather than a wrongful rejection.
+    hard_fail = ("card_read", "name_match", "face_match")
+    if any(statuses.get(name) == "fail" for name in hard_fail):
         return "fail"
-    required = {"card_read", "hologram", "face_liveness", "name_match"}
+    required = {"card_read", "hologram", "face_liveness", "name_match", "face_match"}
     if required.issubset(statuses) and all(statuses[name] == "pass" for name in required):
         return "pass"
     return "needs_review"

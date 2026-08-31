@@ -183,7 +183,7 @@ async def test_kyc_result_requires_key_and_persists_structured_result() -> None:
         "decision": "needs_review",
         "checks": {
             name: {"status": "unclear", "confidence": 0.4, "reasons": ["not clear"]}
-            for name in ("card_read", "hologram", "face_liveness", "name_match")
+            for name in ("card_read", "hologram", "face_liveness", "name_match", "face_match")
         },
         "extracted": {"name": "", "pan": "", "dob": ""},
         "session_id": "sess_fixed",
@@ -211,7 +211,7 @@ async def test_kyc_result_cannot_be_attached_to_another_accounts_session() -> No
         "decision": "needs_review",
         "checks": {
             name: {"status": "unclear", "confidence": 0.4, "reasons": ["not clear"]}
-            for name in ("card_read", "hologram", "face_liveness", "name_match")
+            for name in ("card_read", "hologram", "face_liveness", "name_match", "face_match")
         },
         "extracted": {"name": "", "pan": "", "dob": ""},
         "session_id": "sess_other",

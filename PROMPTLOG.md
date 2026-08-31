@@ -50,3 +50,45 @@ This append-only log records user-authored prompts given to the coding agent in 
 
 > still this: [browser console log attached]
 > plus no rumik voice came thru
+
+## 012 — 2026-08-30
+
+> I did test it, but I can only hear the first greeting. I cannot see myself in the
+> camera, and the conversation is not happening. It should be a two way conversation,
+> like an actual person doing KYC, resolving doubts, etc. See this as a whole pipeline
+> and make it work correctly. Ask me for any doubts. If this needs work on the SDK,
+> improve the SDK as well — look at the tools being provided and make it work. Also
+> update the prompt log, and restart the local servers.
+
+## 013 — 2026-08-30
+
+> [browser: edge and chrome] can u also improve the UI for both of them, its v bad
+> rn — nice font, positioning, colour scheme — and make them different, for obvious
+> reasons: the platform UI (which hands out the key etc.) one style, and the KYC app
+> a different style. Also: after the agent introduced itself I said "ok lets go" and
+> never received a reply. Can you add a lot of logging everywhere to make it resilient.
+
+## 014 — 2026-08-30
+
+> i still spoke to it and no reply
+
+## 015 — 2026-08-30
+
+> it worked, the agent responded this time — but i didn't even show the PAN and it
+> said a random name and PAN number, why did that happen?
+> [after fix] so the SDK is now basically prompt- and tool-driven, right? how can we
+> reduce the response times of the agent — the whole pipeline?
+
+## 016 — 2026-08-30
+
+> I saw the logs, it's around four seconds now. Any more ways to reduce latency? You
+> can check the docs at Rumik (r-u-m-i-k). Also I asked if it can see — tell me my
+> t-shirt colour — and it said it can't, so I'm not sure it's actually seeing
+> anything. You know what I'm saying?
+
+## 017 — 2026-08-30
+
+> For the final verdict (verified or not) it needs something to check against — should
+> we take the name (etc.) as input before the call, or say "we've noted this, we'll get
+> back to you shortly"? Also, since we take the PAN card, the person's face can be a
+> thing to check — how, and what do we give it to check against?

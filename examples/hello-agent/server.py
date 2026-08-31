@@ -4,15 +4,21 @@ import os
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
-PLATFORM_URL = os.getenv("PLATFORM_URL", "http://127.0.0.1:8000").rstrip("/")
-PLATFORM_KEY = os.getenv("DEMO_PLATFORM_KEY", "")
 ROOT = Path(__file__).resolve().parent
 SDK_ROOT = ROOT.parents[1] / "sdk" / "browser"
+
+# Load the combined repository-root .env so this example runs without the
+# launching shell needing to export the platform credentials by hand.
+load_dotenv(ROOT.parents[1] / ".env")
+
+PLATFORM_URL = os.getenv("PLATFORM_URL", "http://127.0.0.1:8000").rstrip("/")
+PLATFORM_KEY = os.getenv("DEMO_PLATFORM_KEY", "")
 
 app = FastAPI(title="Rumik Hello Agent")
 

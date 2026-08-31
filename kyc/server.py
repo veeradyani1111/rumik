@@ -4,15 +4,21 @@ import os
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
-PLATFORM_URL = os.getenv("PLATFORM_URL", "http://127.0.0.1:8000").rstrip("/")
-PLATFORM_KEY = os.getenv("DEMO_PLATFORM_KEY", "")
 ROOT = Path(__file__).resolve().parent
 SDK_ROOT = ROOT.parent / "sdk" / "browser"
+
+# The combined deployment ships one .env at the repository root. Load it so the
+# proxy is self-contained instead of depending on the launching shell's exports.
+load_dotenv(ROOT.parent / ".env")
+
+PLATFORM_URL = os.getenv("PLATFORM_URL", "http://127.0.0.1:8000").rstrip("/")
+PLATFORM_KEY = os.getenv("DEMO_PLATFORM_KEY", "")
 
 app = FastAPI(title="Rumik KYC Demo")
 

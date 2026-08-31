@@ -19,6 +19,7 @@ def test_kyc_result_serializes_the_structured_contract() -> None:
             hologram=CheckResult(**_check("pass")),
             face_liveness=CheckResult(**_check("pass")),
             name_match=CheckResult(**_check("pass")),
+            face_match=CheckResult(**_check("pass")),
         ),
         extracted=ExtractedIdentity(name="Veer Adyani", pan="ABCDE1234F", dob="2000-08-30"),
         session_id="sess_123",
@@ -47,18 +48,20 @@ def test_kyc_result_rejects_decision_that_contradicts_checks() -> None:
                 hologram=passing,
                 face_liveness=passing,
                 name_match=passing,
+                face_match=passing,
             ),
             extracted=ExtractedIdentity(),
             session_id="sess_123",
         )
 
 
-@pytest.mark.parametrize("statuses", list(product(("pass", "fail", "unclear"), repeat=4)))
+@pytest.mark.parametrize("statuses", list(product(("pass", "fail", "unclear"), repeat=5)))
 def test_decision_truth_table_for_every_check_combination(statuses: tuple[str, ...]) -> None:
-    names = ("card_read", "hologram", "face_liveness", "name_match")
+    names = ("card_read", "hologram", "face_liveness", "name_match", "face_match")
     checks = {name: _check(status) for name, status in zip(names, statuses, strict=True)}
 
-    if checks["card_read"]["status"] == "fail" or checks["name_match"]["status"] == "fail":
+    hard_fail = ("card_read", "name_match", "face_match")
+    if any(checks[name]["status"] == "fail" for name in hard_fail):
         expected = "fail"
     elif all(check["status"] == "pass" for check in checks.values()):
         expected = "pass"
