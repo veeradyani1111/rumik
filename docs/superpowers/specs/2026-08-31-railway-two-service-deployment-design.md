@@ -59,8 +59,11 @@ printed, written to deployment files, added to shell history, or committed.
 - Add a lightweight KYC health endpoint so Railway and the deployment verifier
   can distinguish a running proxy from a static-page-only response.
 - Configure `/health` as the health-check path for each service.
-- Deploy both services from the same local commit through Railway CLI. This
-  avoids making deployment depend on either GitHub repository connection.
+- Connect both services to `veeradyani1111/rumik` on `main`, the repository
+  available to the Railway workspace's GitHub integration. Railway builds the
+  exact commit that was first pushed to both GitHub repositories.
+- Use Railway CLI to create and configure the project and services, connect the
+  GitHub sources, and inspect deployment state.
 - Record the repeatable service commands and variable ownership in repository
   documentation without recording secret values.
 
@@ -110,6 +113,5 @@ the diagnosed cause.
 - Railway private networking.
 - Splitting the monorepo into separate source repositories or divergent
   branches.
-- GitHub-triggered automatic deployments.
 - Custom domains, horizontal scaling, or production-grade distributed worker
   orchestration.
