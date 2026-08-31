@@ -99,6 +99,21 @@ $env:RUN_LIVE_TESTS = "1"
 .venv\Scripts\python.exe -m pytest -q tests\integration\test_rumik_tts_live.py
 ```
 
+## Deploy on Railway
+
+Deploy this monorepo as two services in one Railway project. Both services
+track `veeradyani1111/rumik` on `main`.
+
+| Service | Start command | Health check | Variables |
+| --- | --- | --- | --- |
+| `rumik-sdk` | `python -m uvicorn sdk.server.app:app --host 0.0.0.0 --port $PORT` | `/health` | Provider, LiveKit, Neon, model, sampling, broker, and `DEMO_PLATFORM_KEY` settings from `.env` |
+| `rumik-kyc` | `python -m uvicorn kyc.server:app --host 0.0.0.0 --port $PORT` | `/health` | Only `PLATFORM_URL` and `DEMO_PLATFORM_KEY` |
+
+Give both services Railway public domains. Set the KYC `PLATFORM_URL` to
+`https://${{rumik-sdk.RAILWAY_PUBLIC_DOMAIN}}`; the KYC proxy deliberately
+calls the SDK through its public HTTPS URL. Do not upload the root `.env` or
+expose either long-lived key to browser JavaScript.
+
 ## Manual live checkpoint
 
 With `.env` configured:

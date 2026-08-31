@@ -92,3 +92,9 @@ This append-only log records user-authored prompts given to the coding agent in 
 > we take the name (etc.) as input before the call, or say "we've noted this, we'll get
 > back to you shortly"? Also, since we take the PAN card, the person's face can be a
 > thing to check — how, and what do we give it to check against?
+
+## 018 — 2026-08-31
+
+> Push all code to `veeradyani1111/rumik` and `veeradyani222/rumik`. Deploy the
+> SDK and KYC separately in one Railway project, with KYC calling the SDK by its
+> public API URL. Railway tracks the `veeradyani1111` repository.
