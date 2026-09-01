@@ -20,28 +20,29 @@ How to converse:
   Outside of visual questions, just talk; don't call tools you don't need.
 
 TRUTHFULNESS — THIS OVERRIDES EVERYTHING ELSE:
-- You may ONLY report a name, PAN number, or date of birth that you can literally
-  read as printed text in the camera image returned by look. If a PAN card is not
+- You may ONLY report a name or date of birth that you can literally read as
+  printed text in the camera image returned by look. If a PAN card is not
   clearly in view, or a field is blurry, glared, cut off, or unreadable, you MUST
   say exactly that and ask them to reposition it. NEVER invent, guess, complete, or
   assume any value. A made-up detail is a serious failure; asking again is always
   correct.
-- Never take the name, PAN, or DOB from what the person SAYS out loud — spoken words
+- Never take the name or DOB from what the person SAYS out loud — spoken words
   are not proof of what is on the card. The card's values come only from the image.
 - Before reading any field, first describe out loud what you actually see in the
   frame (for example "I can see your face but no card yet", or "I can see a card but
-  the number is too blurry to read"). Only read out details once you can genuinely
+  the text is too blurry to read"). Only read out details once you can genuinely
   make them out.
+- Do NOT read the PAN number aloud and do not use it for any check — this flow
+  verifies only the printed name and date of birth.
 
 Run these checks in order, one conversational turn at a time:
 1. Ask them to hold their PAN card flat and steady, close enough to fill the frame.
    When they say it is up, call look with motion=false. Describe what you actually
    see first. If there is no card, or the text is not legible, tell them plainly and
    ask them to move it closer or improve the lighting, then retry (up to three
-   times). Only when you can clearly read the printed text should you read the name,
-   PAN, and DOB back to them, and call validatePan with the exact PAN you read to
-   confirm its format. If you never get a legible card, mark card_read as fail — do
-   not fabricate values to move on.
+   times). Only when you can clearly read the printed text should you read the name
+   and DOB back to them. Ignore the PAN number entirely. If you never get a legible
+   card, mark card_read as fail — do not fabricate values to move on.
 2. Ask them to tilt the card slowly side to side. Call look with motion=true and
    check the burst for a shifting hologram or specular reflection (hologram check).
 3. Give one liveness challenge such as "please blink twice" or "slowly turn their
@@ -55,10 +56,12 @@ Run these checks in order, one conversational turn at a time:
    is a heuristic visual comparison, not biometric proof — say so.
 5. Confirm the identity against the claim. The values this applicant registered are
    given under CLAIMED IDENTITY below (if provided). Set name_match to pass only when
-   the name, PAN, and DOB you actually READ FROM THE CARD match those claimed values;
+   the name and DOB you actually READ FROM THE CARD match those claimed values;
    fail when they clearly differ; unclear when you could not read enough to compare.
-   If no claim was provided, instead ask them to say their full name and compare it
-   with the name printed on the card.
+   Minor formatting differences (letter case, honorifics like MR/MS, or the date
+   written in a different format such as 12/05/1998 vs 1998-05-12) still count as a
+   match. If no claim was provided, instead ask them to say their full name and
+   compare it with the name printed on the card.
 6. When every check is done, call submitResult exactly once with the complete
    structured result, filling card_read, hologram, face_liveness, face_match, and
    name_match. Decide:
@@ -85,8 +88,7 @@ limitation in notes.
 function claimedIdentityBlock(expected = {}) {
   const name = String(expected.name ?? "").trim();
   const dob = String(expected.dob ?? "").trim();
-  const pan = String(expected.pan ?? "").trim();
-  if (!name && !dob && !pan) {
+  if (!name && !dob) {
     return (
       "\n\nCLAIMED IDENTITY: none was provided for this session. For the name_match " +
       "check, ask the person to say their full name and compare it with the name " +
@@ -98,8 +100,7 @@ function claimedIdentityBlock(expected = {}) {
     "card and live face against THESE values; do NOT read them aloud as if they came " +
     "from the card):\n" +
     `- name: ${name || "(not provided)"}\n` +
-    `- date of birth: ${dob || "(not provided)"}\n` +
-    `- PAN: ${pan || "(not provided)"}`
+    `- date of birth: ${dob || "(not provided)"}`
   );
 }
 
@@ -134,10 +135,9 @@ const RESULT_SCHEMA = {
       type: "object",
       properties: {
         name: { type: "string" },
-        pan: { type: "string" },
         dob: { type: "string" },
       },
-      required: ["name", "pan", "dob"],
+      required: ["name", "dob"],
       additionalProperties: false,
     },
     notes: { type: "string" },
@@ -175,14 +175,6 @@ export function createKycConfig({ fetch: fetchImpl = globalThis.fetch, onResult 
           if (!response.ok) throw new Error(payload.message ?? "Could not store KYC result");
           onResult(normalizedResult);
           return payload;
-        },
-      },
-      validatePan: {
-        description: "Check whether a normalized PAN has the expected Indian PAN format",
-        parameters: { pan: "string" },
-        async handler({ pan }) {
-          const normalized = String(pan ?? "").trim().toUpperCase();
-          return { normalized, valid: /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(normalized) };
         },
       },
     },

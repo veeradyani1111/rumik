@@ -10,7 +10,7 @@ A prompt-first browser SDK for agents that talk, listen, see on demand, and call
 - Pipecat connects LiveKit input → OpenAI STT → conversation context → on-demand frame sampler → OpenAI vision LLM → Rumik TTS → LiveKit output.
 - `look` sends zero frames while idle, one frame for a read, or a bounded recent burst for motion. A rolling per-minute cap prevents runaway image spend.
 - Client tool handlers stay in the page; schemas go to the worker and calls/results cross the LiveKit data channel.
-- Video KYC is a prompt plus `submitResult` and `validatePan` tools.
+- Video KYC is a prompt plus a `submitResult` tool. It verifies only the printed name and date of birth against what the applicant entered — the PAN number is never collected or matched.
 
 ## Prerequisites
 

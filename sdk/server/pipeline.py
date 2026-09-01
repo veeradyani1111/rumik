@@ -112,9 +112,10 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
         settings.rumik_tts_speaker,
         [tool.name for tool in config.tools],
     )
-    # Tighter end-of-turn: 0.5s of silence closes the turn (default 0.8s) so the
-    # agent starts replying sooner. Short KYC answers tolerate this well.
-    vad = SileroVADAnalyzer(params=VADParams(stop_secs=0.5))
+    # Tighter end-of-turn: 0.35s of silence closes the turn (default 0.8s) so the
+    # agent starts replying sooner. Short KYC answers tolerate this well; if the
+    # agent starts talking over people mid-sentence, raise this first.
+    vad = SileroVADAnalyzer(params=VADParams(stop_secs=0.35))
     # In Pipecat 1.3.0 the transport no longer runs VAD from a `vad_analyzer`
     # param (that field does not exist and is silently ignored). Voice-activity
     # detection is a standalone processor that must sit in the pipeline; without
@@ -158,7 +159,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
         context,
         user_params=LLMUserAggregatorParams(
             user_turn_strategies=UserTurnStrategies(
-                stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.4)],
+                stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.25)],
             ),
         ),
     )

@@ -81,13 +81,12 @@
     .cta:hover{filter:brightness(1.05)}
     .cta:active{transform:translateY(1px)}
     .cta:disabled{opacity:.55; cursor:default; filter:grayscale(.2)}
-    .enroll{display:grid; grid-template-columns:1.4fr .9fr 1fr; gap:.7rem; margin-bottom:1rem}
+    .enroll{display:grid; grid-template-columns:1.5fr 1fr; gap:.7rem; margin-bottom:1rem}
     @media(max-width:560px){.enroll{grid-template-columns:1fr}}
     .enroll label{display:grid; gap:.3rem; font-size:.72rem; font-weight:700; letter-spacing:.02em; color:var(--muted); text-transform:uppercase}
     .enroll input{font-family:var(--font); font-size:.92rem; color:var(--text); background:var(--surface-2);
       border:1px solid var(--border-strong); border-radius:10px; padding:.6rem .7rem}
     .enroll input:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft)}
-    .enroll input[name="pan"]{text-transform:uppercase}
     .enroll input:disabled{opacity:.6}
     .side{display:grid; gap:1.25rem}
     .side h3{margin:0 0 .9rem; font-size:.95rem; letter-spacing:-.01em}
@@ -130,9 +129,8 @@
           <span class="pill" id="statusPill"><span class="led"></span><span id="statusText">Ready</span></span>
         </div>
         <form id="enroll" class="enroll" autocomplete="off">
-          <label>Full name<input name="name" type="text" placeholder="As printed on your PAN"></label>
-          <label>Date of birth<input name="dob" type="date"></label>
-          <label>PAN number<input name="pan" type="text" placeholder="ABCDE1234F" maxlength="10"></label>
+          <label>Full name<input name="name" type="text" placeholder="As printed on your PAN card" required></label>
+          <label>Date of birth<input name="dob" type="date" required></label>
         </form>
         <div class="videoframe">
           <div id="agent"></div>
@@ -157,7 +155,7 @@
             <li data-step="hologram"><span class="n">2</span><span class="t">Check the hologram<small>Tilt the card side to side</small></span></li>
             <li data-step="liveness"><span class="n">3</span><span class="t">Quick liveness check<small>Blink or turn your head when asked</small></span></li>
             <li data-step="face"><span class="n">4</span><span class="t">Face match<small>Hold the card next to your face</small></span></li>
-            <li data-step="match"><span class="n">5</span><span class="t">Match your details<small>Card is checked against what you entered</small></span></li>
+            <li data-step="match"><span class="n">5</span><span class="t">Match your details<small>Card is checked against the name and date of birth you entered</small></span></li>
           </ol>
         </div>
         <div class="card pad">
@@ -214,6 +212,16 @@
       }
     }
 
+    // The session can only start once both identity fields are filled in.
+    function refreshStartGate() {
+      const fd = new FormData(enroll);
+      const filled = (fd.get("name") || "").toString().trim() && (fd.get("dob") || "").toString().trim();
+      startButton.disabled = !filled;
+      startButton.title = filled ? "" : "Enter your full name and date of birth first";
+    }
+    enroll.addEventListener("input", refreshStartGate);
+    refreshStartGate();
+
     startButton.onclick = async () => {
       startButton.disabled = true;
       setStatus("Starting…", "busy");
@@ -221,7 +229,6 @@
       const expected = {
         name: (fd.get("name") || "").toString().trim(),
         dob: (fd.get("dob") || "").toString().trim(),
-        pan: (fd.get("pan") || "").toString().trim(),
       };
       // Lock the claimed identity for the session so it can't change mid-call.
       for (const el of enroll.elements) el.disabled = true;

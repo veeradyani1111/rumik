@@ -10,7 +10,9 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
   assert.equal(config.vision, true);
   assert.match(KYC_PROMPT, /look.*motion=true/is);
   assert.match(KYC_PROMPT, /submitResult/);
-  assert.deepEqual(Object.keys(config.tools), ["submitResult", "validatePan"]);
+  assert.deepEqual(Object.keys(config.tools), ["submitResult"]);
+  // The flow verifies only name + DOB; the PAN number is never collected or matched.
+  assert.deepEqual(config.tools.submitResult.parameters.properties.extracted.required, ["name", "dob"]);
   const schema = config.tools.submitResult.parameters;
   assert.equal(schema.type, "object");
   assert.deepEqual(schema.required, ["decision", "checks", "extracted", "notes"]);
