@@ -73,6 +73,11 @@
     #agent{min-height:280px}
     .placeholder{position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:1.5rem;
       color:#a9b6c9; font-weight:500; pointer-events:none}
+    /* author display:grid beats the UA [hidden] rule, so hide explicitly */
+    .placeholder[hidden]{display:none}
+    /* the page has its own status pill; the SDK's internal status line only
+       clutters the video frame here */
+    #agent .rumik-agent__status{display:none}
     .placeholder svg{width:44px; height:44px; opacity:.7; margin-bottom:.6rem}
     .cta{margin-top:1rem; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
       padding:.95rem 1.1rem; border:0; border-radius:14px; cursor:pointer;

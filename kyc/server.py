@@ -37,6 +37,16 @@ def create_app(
 
     app = FastAPI(title="Rumik KYC Demo")
 
+    @app.middleware("http")
+    async def no_stale_assets(request: Request, call_next):
+        # Without Cache-Control, browsers heuristically cache the app's JS and
+        # can run a stale module against a freshly deployed page (seen live:
+        # old tools, new HTML). no-cache forces revalidation; ETags keep
+        # unchanged files cheap (304).
+        response = await call_next(request)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
     @app.get("/health")
     async def health():
         return {
