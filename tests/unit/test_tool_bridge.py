@@ -91,3 +91,49 @@ async def test_call_timeout_returns_stable_error_contract() -> None:
 
     assert await bridge.call("slowTool", {}) == {"error": "tool_timeout"}
     assert bridge.pending_count == 0
+
+
+@pytest.mark.asyncio
+async def test_per_call_timeout_overrides_the_bridge_default() -> None:
+    sent: list[dict] = []
+
+    async def send(payload: dict) -> None:
+        sent.append(payload)
+
+    bridge = ClientToolBridge(send, timeout_seconds=0.01)
+    task = asyncio.create_task(bridge.call("captureCard", {}, timeout_seconds=5.0))
+    await asyncio.sleep(0.05)  # would already have timed out at the default
+
+    assert not task.done()
+    await bridge.handle_message({"type": "tool_result", "id": sent[0]["id"], "result": {"captured": True}})
+    assert await task == {"captured": True}
+
+
+@pytest.mark.asyncio
+async def test_still_chunks_reassemble_into_decoded_bytes() -> None:
+    import base64
+
+    bridge = ClientToolBridge(lambda _payload: None)
+    encoded = base64.b64encode(b"fake-jpeg-bytes").decode("ascii")
+    first, second = encoded[:8], encoded[8:]
+
+    assert await bridge.handle_message({"type": "still", "id": "s1", "seq": 1, "total": 2, "data": second})
+    assert bridge.pop_still("s1") is None  # incomplete
+    assert await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 2, "data": first})
+
+    assert bridge.pop_still("s1") == b"fake-jpeg-bytes"
+    assert bridge.pop_still("s1") is None  # popped exactly once
+
+
+@pytest.mark.asyncio
+async def test_still_chunks_reject_malformed_or_oversized_payloads() -> None:
+    bridge = ClientToolBridge(lambda _payload: None)
+
+    assert not await bridge.handle_message({"type": "still", "id": "", "seq": 0, "total": 1, "data": "aGk="})
+    assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 2, "total": 2, "data": "aGk="})
+    assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 0, "data": "aGk="})
+    assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 500, "data": "aGk="})
+    assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 1, "data": "x" * 30_000})
+    assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 1, "data": "not base64!!"})
+    assert bridge.pop_still("s1") is None
+    assert bridge.pop_still(None) is None

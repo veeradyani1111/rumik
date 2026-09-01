@@ -9,6 +9,7 @@ export function buildSessionPayload(config) {
     name,
     description: tool.description,
     parameters: tool.parameters ?? {},
+    ...(tool.timeoutSecs ? { timeout_secs: tool.timeoutSecs } : {}),
   }));
   return {
     prompt: config.prompt,
@@ -20,13 +21,13 @@ export function buildSessionPayload(config) {
 }
 
 
-export async function runToolHandler(tools, call) {
+export async function runToolHandler(tools, call, context = {}) {
   const handler = tools?.[call.name]?.handler;
   if (typeof handler !== "function") {
     return { type: "tool_result", id: call.id, result: { error: "unknown_tool" } };
   }
   try {
-    const result = await handler(call.args ?? {});
+    const result = await handler(call.args ?? {}, context);
     return { type: "tool_result", id: call.id, result };
   } catch (error) {
     return {
@@ -130,7 +131,13 @@ class AgentController {
     this._emit(payload);
     if (payload?.type !== "tool_call") return;
     this._log("info", "tool call", { name: payload.name });
-    const result = await runToolHandler(this.config.tools ?? {}, payload);
+    // Handlers get a context so interactive tools can read the live camera
+    // preview and stream data (e.g. a captured still) back to the worker.
+    const context = {
+      video: this.elements.video,
+      sendData: (message) => this.bridge.sendData(message),
+    };
+    const result = await runToolHandler(this.config.tools ?? {}, payload, context);
     await this.bridge.sendData(result);
   }
 

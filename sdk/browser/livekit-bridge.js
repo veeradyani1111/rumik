@@ -89,8 +89,10 @@ export class LiveKitBridge {
 
   async publishCamera() {
     log("info", "requesting camera (getUserMedia video)");
+    // 1080p: card stills are grabbed straight off this local track, so its
+    // native resolution — not the WebRTC-compressed stream — sets read quality.
     const track = await this.client.createLocalVideoTrack({
-      resolution: { width: 1280, height: 720 },
+      resolution: { width: 1920, height: 1080 },
     });
     await this.room.localParticipant.publishTrack(track);
     this.localTracks.push(track);

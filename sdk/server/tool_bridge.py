@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from copy import deepcopy
 import inspect
 import json
@@ -10,6 +11,11 @@ from uuid import uuid4
 
 
 SendPayload = Callable[[dict[str, Any]], Awaitable[None] | None]
+
+# Bounds for client-uploaded stills so a hostile page cannot balloon worker memory.
+MAX_STILL_CHUNKS = 256
+MAX_STILL_CHUNK_CHARS = 20_000
+MAX_STILLS_KEPT = 4
 
 
 def _value_schema(specification: Any) -> dict[str, Any]:
@@ -73,12 +79,16 @@ class ClientToolBridge:
         self._send_payload = send_payload
         self._timeout_seconds = timeout_seconds
         self._pending: dict[str, asyncio.Future[Any]] = {}
+        self._still_chunks: dict[str, dict[int, str]] = {}
+        self._stills: dict[str, bytes] = {}
 
     @property
     def pending_count(self) -> int:
         return len(self._pending)
 
-    async def call(self, name: str, args: Mapping[str, Any]) -> Any:
+    async def call(
+        self, name: str, args: Mapping[str, Any], *, timeout_seconds: float | None = None
+    ) -> Any:
         call_id = uuid4().hex
         future = asyncio.get_running_loop().create_future()
         self._pending[call_id] = future
@@ -88,11 +98,49 @@ class ClientToolBridge:
             )
             if inspect.isawaitable(maybe_awaitable):
                 await maybe_awaitable
-            return await asyncio.wait_for(future, timeout=self._timeout_seconds)
+            return await asyncio.wait_for(
+                future, timeout=timeout_seconds or self._timeout_seconds
+            )
         except TimeoutError:
             return {"error": "tool_timeout"}
         finally:
             self._pending.pop(call_id, None)
+
+    def pop_still(self, still_id: object) -> bytes | None:
+        """Take ownership of a fully reassembled client still, if present."""
+        if not isinstance(still_id, str):
+            return None
+        return self._stills.pop(still_id, None)
+
+    def _handle_still_chunk(self, payload: Mapping[str, Any]) -> bool:
+        still_id = str(payload.get("id", ""))
+        try:
+            seq = int(payload.get("seq", -1))
+            total = int(payload.get("total", 0))
+        except (TypeError, ValueError):
+            return False
+        data = payload.get("data")
+        if (
+            not still_id
+            or not isinstance(data, str)
+            or not 0 < total <= MAX_STILL_CHUNKS
+            or not 0 <= seq < total
+            or len(data) > MAX_STILL_CHUNK_CHARS
+        ):
+            return False
+        chunks = self._still_chunks.setdefault(still_id, {})
+        chunks[seq] = data
+        if len(chunks) < total:
+            return True
+        self._still_chunks.pop(still_id, None)
+        try:
+            image = base64.b64decode("".join(chunks[i] for i in range(total)), validate=True)
+        except (KeyError, ValueError):
+            return False
+        self._stills[still_id] = image
+        while len(self._stills) > MAX_STILLS_KEPT:
+            self._stills.pop(next(iter(self._stills)))
+        return True
 
     async def handle_message(self, message: bytes | str | Mapping[str, Any]) -> bool:
         if isinstance(message, bytes):
@@ -101,6 +149,8 @@ class ClientToolBridge:
             payload = json.loads(message)
         else:
             payload = dict(message)
+        if payload.get("type") == "still":
+            return self._handle_still_chunk(payload)
         if payload.get("type") != "tool_result":
             return False
         future = self._pending.get(str(payload.get("id", "")))

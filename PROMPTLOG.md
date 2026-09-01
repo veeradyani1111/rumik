@@ -98,3 +98,16 @@ This append-only log records user-authored prompts given to the coding agent in 
 > Push all code to `veeradyani1111/rumik` and `veeradyani222/rumik`. Deploy the
 > SDK and KYC separately in one Railway project, with KYC calling the SDK by its
 > public API URL. Railway tracks the `veeradyani1111` repository.
+
+## 019 — 2026-09-01
+
+> Only check the name and DOB (drop the PAN-number field and check). Will the
+> mirrored image cause problems? Reduce the AI voice response time. Don't allow
+> the KYC session to start until name and DOB are filled.
+
+## 020 — 2026-09-01
+
+> On the live call it couldn't read the card at all. Like other platforms, have
+> the person position the card in an on-screen box, click a picture, and send
+> that photo to the model for the verdict — narrating the steps meanwhile. And
+> when the user asks "am I visible", actually send a picture for a real answer.

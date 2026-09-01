@@ -83,6 +83,26 @@ test("runToolHandler awaits the named browser function", async () => {
 });
 
 
+test("runToolHandler hands interactive tools the agent context", async () => {
+  const sent = [];
+  const context = { video: { id: "preview" }, sendData: async (message) => sent.push(message) };
+  const tools = {
+    snap: {
+      handler: async (_args, ctx) => {
+        await ctx.sendData({ type: "still", id: "s1", seq: 0, total: 1, data: "aGk=" });
+        return { captured: true, video: ctx.video.id };
+      },
+    },
+  };
+
+  assert.deepEqual(
+    await runToolHandler(tools, { id: "call-1", name: "snap", args: {} }, context),
+    { type: "tool_result", id: "call-1", result: { captured: true, video: "preview" } },
+  );
+  assert.deepEqual(sent, [{ type: "still", id: "s1", seq: 0, total: 1, data: "aGk=" }]);
+});
+
+
 test("runToolHandler returns stable errors for missing and throwing handlers", async () => {
   assert.deepEqual(
     await runToolHandler({}, { id: "call-1", name: "missing", args: {} }),

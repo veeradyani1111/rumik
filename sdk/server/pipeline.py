@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Any
 
 from loguru import logger
+from PIL import Image as PILImage
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -39,6 +41,9 @@ class WorkerTool(BaseModel):
     name: str
     description: str
     parameters: dict[str, Any] = Field(default_factory=dict)
+    # How long the worker waits for the browser handler. Interactive tools (like a
+    # card capture that waits for the person to click) legitimately take a while.
+    timeout_secs: float = Field(default=15.0, ge=1.0, le=120.0)
 
 
 class AgentConfig(BaseModel):
@@ -208,13 +213,37 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
     llm.register_function("look", look_handler, timeout_secs=12)
 
     for tool in config.tools:
-        async def client_handler(params, tool_name=tool.name) -> None:
+        async def client_handler(params, tool_name=tool.name, tool_timeout=tool.timeout_secs) -> None:
             logger.info("client tool {!r} called", tool_name)
-            result = await bridge.call(tool_name, params.arguments)
+            result = await bridge.call(tool_name, params.arguments, timeout_seconds=tool_timeout)
             logger.info("client tool {!r} returned", tool_name)
+            # A handler may upload a high-resolution still (e.g. the card photo)
+            # over the data channel and reference it by id. Attach it to the
+            # context as an ephemeral image so the LLM reads THIS photo, not the
+            # compressed live video frames.
+            still = bridge.pop_still(result.get("still_id")) if isinstance(result, dict) else None
+            if still is not None:
+                with PILImage.open(BytesIO(still)) as decoded:
+                    size = decoded.size
+                message = await LLMContext.create_image_message(
+                    format="image/jpeg",
+                    size=size,
+                    image=still,
+                    text=(
+                        "This is the high-resolution photo just captured by the "
+                        "user through the on-screen card frame. Read printed text "
+                        "from THIS image only. If a field is blurry, glared, cut "
+                        "off, or unreadable, say so and ask for a new capture — "
+                        "never guess or invent a value."
+                    ),
+                )
+                context.add_message(message)
+                ephemeral_messages.append(message)
+                result = {**result, "photo_attached": True, "photo_size": list(size)}
+                logger.info("client tool {!r} attached still ({}x{})", tool_name, *size)
             await params.result_callback(result)
 
-        llm.register_function(tool.name, client_handler, timeout_secs=15)
+        llm.register_function(tool.name, client_handler, timeout_secs=tool.timeout_secs + 10)
 
     @aggregators.assistant().event_handler("on_assistant_turn_stopped")
     async def remove_ephemeral_images(_aggregator, _message) -> None:

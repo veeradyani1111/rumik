@@ -25,6 +25,7 @@ class ToolSchema(BaseModel):
     name: str = Field(min_length=1, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     description: str = Field(min_length=1)
     parameters: dict[str, Any] = Field(default_factory=dict)
+    timeout_secs: float = Field(default=15.0, ge=1.0, le=120.0)
 
 
 class SessionRequest(BaseModel):
