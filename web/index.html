@@ -51,22 +51,6 @@
           <li><span class="mk">⌘</span><span><b>Your tools stay yours.</b> Handlers run in the page; only their schemas cross to the agent.</span></li>
           <li><span class="mk">◎</span><span><b>Vision on demand.</b> The agent samples a frame only when it needs to look — with a per-minute budget.</span></li>
         </ul>
-        <div class="snippet">
-          <p class="cap">Drop-in usage</p>
-          <pre><code>const agent = RumikAgent.create({
-  session: "/session",
-  vision: true,
-  prompt: "You are a warm, concise assistant.",
-  tools: {
-    saveTicket: {
-      description: "Save a support ticket",
-      parameters: { subject: "string", priority: "low | high" },
-      handler: async (args) =&gt; saveTicket(args),
-    },
-  },
-});
-await agent.mount("#agent");</code></pre>
-        </div>
       </div>
 
       <aside class="card">

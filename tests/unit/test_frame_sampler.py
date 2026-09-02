@@ -105,3 +105,31 @@ async def test_look_without_camera_returns_sentinel_note() -> None:
     assert result.images == []
     assert result.note == "(no camera frame available)"
     assert sampler.images_sent == 0
+
+
+@pytest.mark.asyncio
+async def test_motion_burst_accepts_frames_faster_than_idle_fps() -> None:
+    # Idle sampling is throttled to max_fps, but during a motion look the
+    # sampler must accept frames at burst_fps so a blink or hologram flash
+    # actually lands inside the burst.
+    clock = FakeClock()
+    sampler = FrameSampler(
+        SamplePolicy(max_fps=2, burst_fps=10, burst_count=4, burst_window_ms=1000),
+        clock=clock,
+    )
+    sampler.accept_image(image("red"))
+
+    look_task = asyncio.create_task(sampler.look(reason="blink check", motion=True))
+    await asyncio.sleep(0)
+    for step in range(1, 5):
+        clock.value = step * 0.2  # 5fps cadence, far above the idle 2fps limit
+        assert sampler.accept_image(image("green")) is True
+        await asyncio.sleep(0)
+    result = await look_task
+
+    assert [frame.captured_at for frame in result.images] == [step * 0.2 for step in range(1, 5)]
+    assert result.reused_last_frame is False
+
+    # Outside the burst, the idle throttle applies again.
+    clock.value = 0.85
+    assert sampler.accept_image(image("blue")) is False

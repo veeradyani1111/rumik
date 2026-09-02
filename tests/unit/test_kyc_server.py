@@ -79,3 +79,45 @@ async def test_proxy_returns_stable_502_for_unusable_upstream(failure: str) -> N
         "code": "PLATFORM_UNAVAILABLE",
         "message": "The Rumik platform is temporarily unavailable.",
     }
+
+
+@pytest.mark.asyncio
+async def test_only_whitelisted_assets_are_served() -> None:
+    app = create_app(platform_url="https://sdk.example", platform_key="rk_live_test")
+
+    async with _client_for(app) as client:
+        index = await client.get("/")
+        config = await client.get("/kyc-config.js")
+        # Server source, schema code, and stored KYC results must never be
+        # reachable over HTTP.
+        leaks = [
+            await client.get(path)
+            for path in ("/server.py", "/schema.py", "/verify.py", "/__init__.py", "/logs/sess_fixed.json")
+        ]
+
+    assert index.status_code == 200
+    assert "Rumik" in index.text
+    assert config.status_code == 200
+    assert "createKycConfig" in config.text
+    assert [response.status_code for response in leaks] == [404, 404, 404, 404, 404]
+
+
+@pytest.mark.asyncio
+async def test_oversized_proxy_bodies_are_rejected_before_forwarding() -> None:
+    def upstream(request: httpx.Request) -> Response:
+        raise AssertionError("oversized body must not reach the platform")
+
+    def client_factory(**kwargs) -> AsyncClient:
+        return AsyncClient(transport=MockTransport(upstream), **kwargs)
+
+    app = create_app(
+        platform_url="https://sdk.example",
+        platform_key="rk_live_test",
+        client_factory=client_factory,
+    )
+
+    async with _client_for(app) as client:
+        response = await client.post("/session", content=b"x" * 100_000)
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "PAYLOAD_TOO_LARGE"

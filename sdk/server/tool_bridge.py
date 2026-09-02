@@ -15,7 +15,10 @@ SendPayload = Callable[[dict[str, Any]], Awaitable[None] | None]
 # Bounds for client-uploaded stills so a hostile page cannot balloon worker memory.
 MAX_STILL_CHUNKS = 256
 MAX_STILL_CHUNK_CHARS = 20_000
-MAX_STILLS_KEPT = 4
+MAX_STILLS_KEPT = 12
+# Half-finished uploads are bounded too: without this a client could open a new
+# still id per packet and grow the chunk map without ever completing an upload.
+MAX_PARTIAL_STILLS = 8
 
 
 def _value_schema(specification: Any) -> dict[str, Any]:
@@ -128,6 +131,9 @@ class ClientToolBridge:
             or len(data) > MAX_STILL_CHUNK_CHARS
         ):
             return False
+        if still_id not in self._still_chunks:
+            while len(self._still_chunks) >= MAX_PARTIAL_STILLS:
+                self._still_chunks.pop(next(iter(self._still_chunks)))
         chunks = self._still_chunks.setdefault(still_id, {})
         chunks[seq] = data
         if len(chunks) < total:

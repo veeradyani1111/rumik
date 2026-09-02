@@ -38,3 +38,9 @@ def test_settings_do_not_require_secrets_for_unit_tests(monkeypatch) -> None:
     assert settings.external_services_configured is False
     assert settings.sample_policy.max_fps == 2
 
+
+
+def test_sample_policy_clamps_burst_fps() -> None:
+    assert SamplePolicy().merge({"burst_fps": 99}).burst_fps == 15
+    assert SamplePolicy().merge({"burst_fps": 0}).burst_fps == 1
+    assert SamplePolicy().burst_fps == 8.0

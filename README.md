@@ -58,6 +58,23 @@ Set-Location examples\hello-agent
 
 The platform home and documentation are at `http://127.0.0.1:8000` and `/docs/`.
 
+## Model settings
+
+All model choices live in one block at the top of `.env` (restart the platform after editing):
+
+| Setting | Values | Notes |
+| --- | --- | --- |
+| `LLM_PROVIDER` | `openai` / `gemini` / `cerebras` | reasoning + vision (tool calls, card read, hologram) |
+| `STT_PROVIDER` | `deepgram` / `sarvam` / `gemini` / `openai` (empty = follow `LLM_PROVIDER`) | `deepgram` and `sarvam` STREAM (transcript ready ~0.2s after you stop talking; Gemini takes ~3s). Cerebras has no speech-to-text, so it falls back to Gemini |
+| `DEEPGRAM_API_KEY` / `SARVAM_API_KEY` | key for the streaming STT you picked | models: `DEEPGRAM_STT_MODEL` (`nova-3-general`), `SARVAM_STT_MODEL` (`saaras:v3`) |
+| `RUMIK_TTS_STREAM_SENTENCES` | `1` / `0` | `1` speaks each sentence as soon as the model has written it; `0` waits for the whole reply (old behaviour) |
+| `GEMINI_STT_MODE` | `live` (default) / `segmented` | `live` streams audio over Gemini's Live API while the person talks and our VAD closes the turn: transcript ~0.3s after they stop. `segmented` is the old one-shot call (~3s) |
+| `GEMINI_LIVE_STT_MODEL` | `gemini-3.5-transcribe-live` | transcription-only Live model (the `transcribe` models only work over the Live API, which is why `gemini-3.5-transcribe` returned nothing through generateContent) |
+| `GEMINI_LLM_MODEL` / `GEMINI_STT_MODEL` | e.g. `gemini-3.5-flash-lite` | `GEMINI_STT_MODEL` is only used in `segmented` mode (flash-lite with a `[no speech]` guard) |
+| `CEREBRAS_LLM_MODEL` | `gemma-4-31b` | the Cerebras model with image input |
+
+Text-to-speech is always Rumik. `GET /health` reports the active `models` for the next session, and every session logs `MODEL_PROVIDER llm=… stt=…`.
+
 ## Use the SDK
 
 Your server exposes a small `/session` proxy that forwards JSON to the platform and adds `Authorization: Bearer rk_live_...`. Your page then uses:

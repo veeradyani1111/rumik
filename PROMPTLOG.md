@@ -111,3 +111,13 @@ This append-only log records user-authored prompts given to the coding agent in 
 > the person position the card in an on-screen box, click a picture, and send
 > that photo to the model for the verdict — narrating the steps meanwhile. And
 > when the user asks "am I visible", actually send a picture for a real answer.
+
+## 021 — 2026-09-01
+
+> Don't make the user click the capture button — auto-detect when the card fills
+> the frame and snap it. Show "connecting" until the agent's voice actually
+> arrives. Make the side steps mirror what's happening live. Don't ask for the
+> blink twice — and when a motion check runs, grab a rapid burst of frames so it
+> can really analyze (hologram too). Have the agent announce when it's analyzing,
+> driven by the flow/tools, not hardcoded. Also look for vulnerabilities and fix
+> them.

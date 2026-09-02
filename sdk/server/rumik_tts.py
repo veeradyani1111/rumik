@@ -29,4 +29,10 @@ def create_rumik_tts(
         gateway_url=settings.rumik_gateway_url,
         settings=service_settings,
         text_transforms=[("*", _sanitize_for_tts)],
+        # pipecat-rumik defaults to buffering the WHOLE model reply before the
+        # first TTS request (to hide Rumik's ~0.3s per-request start-up). That
+        # cost 1-3s of dead air on every multi-sentence line. Sentence streaming
+        # speaks the first sentence while the rest is still being generated; the
+        # ~0.3s between sentences reads as a natural pause.
+        full_response_aggregation=not settings.rumik_tts_stream_sentences,
     )

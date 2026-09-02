@@ -21,6 +21,13 @@ _HIGH_FREQUENCY_FRAMES = frozenset(
         "SpriteFrame",
         "MetricsFrame",
         "HeartbeatFrame",
+        # These fire many times per second and were flooding the buffer (one line
+        # per LLM token, ~25 BotSpeaking lines/s), wiping evidence within ~20s.
+        # Sentences still show up via AggregatedTextFrame / TTSTextFrame.
+        "LLMTextFrame",
+        "BotSpeakingFrame",
+        "OutputTransportMessageUrgentFrame",
+        "LiveKitOutputTransportMessageUrgentFrame",
     }
 )
 
@@ -51,12 +58,20 @@ class FrameTap(FrameProcessor):
     turn, did STT transcribe it, did the LLM answer, did TTS speak?
     """
 
-    def __init__(self, label: str) -> None:
+    def __init__(self, label: str, on_frame=None) -> None:
         super().__init__(name=f"FrameTap[{label}]")
         self._label = label
+        # Optional observer so callers can react to a frame passing this point
+        # (e.g. "the bot just stopped speaking") without a bespoke processor.
+        self._on_frame = on_frame
 
     async def process_frame(self, frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
+        if self._on_frame is not None:
+            try:
+                await self._on_frame(frame, direction)
+            except Exception as exc:  # an observer must never break the pipeline
+                logger.warning("tap[{}] observer raised: {}", self._label, exc)
         name = type(frame).__name__
         if name not in _HIGH_FREQUENCY_FRAMES:
             summary = _summarize(frame)

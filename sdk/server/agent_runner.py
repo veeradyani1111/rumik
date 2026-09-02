@@ -5,10 +5,15 @@ import json
 import os
 import sys
 from collections.abc import Awaitable, Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 
 ProcessFactory = Callable[..., Awaitable[Any]]
+# Repo root (…/rumik2222). The worker is spawned as `python -m sdk.server.agent_worker`,
+# which resolves `sdk` from cwd or PYTHONPATH. cwd is not guaranteed (the server may be
+# launched from elsewhere), so pin PYTHONPATH here to keep the worker import robust.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CHILD_ENV_ALLOWLIST = {
     "APPDATA",
     "PATH",
@@ -47,6 +52,7 @@ class AgentRunner:
             key: value for key, value in os.environ.items() if key.upper() in CHILD_ENV_ALLOWLIST
         }
         child_env["PYTHONIOENCODING"] = "utf-8"
+        child_env["PYTHONPATH"] = str(REPO_ROOT)
         child_env.update(secret_env)
         child_env["RUMIK_AGENT_CONFIG"] = json.dumps(dict(agent_config), separators=(",", ":"))
         process = await self._process_factory(

@@ -7,13 +7,17 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
 ROOT = Path(__file__).resolve().parent
 SDK_ROOT = ROOT.parent / "sdk" / "browser"
 ClientFactory = Callable[..., httpx.AsyncClient]
+
+# Proxied requests carry a session config or a KYC result — both small JSON.
+# Anything bigger is junk and just burns platform bandwidth.
+MAX_PROXY_BODY_BYTES = 64_000
 
 load_dotenv(ROOT.parent / ".env")
 
@@ -63,11 +67,17 @@ def create_app(
                     "message": "Set DEMO_PLATFORM_KEY on the demo server.",
                 },
             )
+        body = await request.body()
+        if len(body) > MAX_PROXY_BODY_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"code": "PAYLOAD_TOO_LARGE", "message": "Request body is too large."},
+            )
         try:
             async with client_factory(timeout=30) as client:
                 response = await client.post(
                     f"{resolved_url}{path}",
-                    content=await request.body(),
+                    content=body,
                     headers={
                         "Authorization": f"Bearer {resolved_key}",
                         "Content-Type": "application/json",
@@ -93,7 +103,18 @@ def create_app(
         return await forward("/kyc-result", request)
 
     app.mount("/sdk", StaticFiles(directory=SDK_ROOT), name="sdk")
-    app.mount("/", StaticFiles(directory=ROOT, html=True), name="kyc")
+
+    # Serve ONLY the two browser assets by name. A directory-wide static mount
+    # here previously exposed the server's own source files and the kyc/logs
+    # directory (stored KYC results) to anyone who guessed the paths.
+    @app.get("/", include_in_schema=False)
+    async def index():
+        return FileResponse(ROOT / "index.html", media_type="text/html")
+
+    @app.get("/kyc-config.js", include_in_schema=False)
+    async def kyc_config():
+        return FileResponse(ROOT / "kyc-config.js", media_type="text/javascript")
+
     return app
 
 

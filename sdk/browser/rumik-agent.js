@@ -10,6 +10,7 @@ export function buildSessionPayload(config) {
     description: tool.description,
     parameters: tool.parameters ?? {},
     ...(tool.timeoutSecs ? { timeout_secs: tool.timeoutSecs } : {}),
+    ...(tool.cancelOnInterruption === false ? { cancel_on_interruption: false } : {}),
   }));
   return {
     prompt: config.prompt,
@@ -78,6 +79,16 @@ class AgentController {
         onAudioTrack: (track) => {
           this._log("info", "agent audio track subscribed");
           this._emit({ type: "agent_audio" });
+          // A subscribed track is not audible voice yet — surface the moment
+          // sound actually starts playing so UIs can show "connecting" until then.
+          this.elements.audio.addEventListener(
+            "playing",
+            () => {
+              this._log("info", "agent voice playing");
+              this._emit({ type: "agent_speaking" });
+            },
+            { once: true },
+          );
           track.attach(this.elements.audio);
         },
       });

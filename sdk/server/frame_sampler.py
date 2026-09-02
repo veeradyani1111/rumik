@@ -46,12 +46,16 @@ class FrameSampler(FrameProcessor):
         self._spend_timestamps: deque[float] = deque()
         self._last_encoded: SampledImage | None = None
         self._new_frame_event = asyncio.Event()
+        self._burst_active = 0
         self.accepted_count = 0
         self.images_sent = 0
 
     def accept_image(self, image: Image.Image) -> bool:
         now = self._now()
-        minimum_interval = 1.0 / self.policy.max_fps
+        # While a motion burst is recording, sample at the faster burst rate so
+        # brief gestures (a blink, a hologram flash while tilting) are captured.
+        fps = self.policy.burst_fps if self._burst_active else self.policy.max_fps
+        minimum_interval = 1.0 / fps
         if self._last_accept_at is not None and now - self._last_accept_at < minimum_interval:
             return False
 
@@ -108,18 +112,22 @@ class FrameSampler(FrameProcessor):
         deadline = loop.time() + (self.policy.burst_window_ms / 1000)
         observed_count = self.accepted_count
         self._new_frame_event.clear()
-        while len(captures) < self.policy.burst_count:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                break
-            try:
-                await asyncio.wait_for(self._new_frame_event.wait(), timeout=remaining)
-            except TimeoutError:
-                break
-            self._new_frame_event.clear()
-            if self.accepted_count > observed_count and self.latest_raw is not None:
-                captures.append(self.latest_raw)
-                observed_count = self.accepted_count
+        self._burst_active += 1
+        try:
+            while len(captures) < self.policy.burst_count:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
+                try:
+                    await asyncio.wait_for(self._new_frame_event.wait(), timeout=remaining)
+                except TimeoutError:
+                    break
+                self._new_frame_event.clear()
+                if self.accepted_count > observed_count and self.latest_raw is not None:
+                    captures.append(self.latest_raw)
+                    observed_count = self.accepted_count
+        finally:
+            self._burst_active -= 1
         if not captures and fallback is not None:
             captures.append(fallback)
         while captures and len(captures) < self.policy.burst_count:

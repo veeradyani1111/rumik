@@ -79,6 +79,14 @@
        clutters the video frame here */
     #agent .rumik-agent__status{display:none}
     .placeholder svg{width:44px; height:44px; opacity:.7; margin-bottom:.6rem}
+    /* shown from Start until the agent's voice actually arrives */
+    .joining{position:absolute; inset:0; z-index:6; display:grid; place-items:center; text-align:center;
+      background:rgba(11,18,32,.72); color:#e6edf7; font-weight:600; pointer-events:none; backdrop-filter:blur(2px)}
+    .joining[hidden]{display:none}
+    .joining .ring{width:44px; height:44px; border-radius:50%; margin:0 auto .75rem;
+      border:4px solid rgba(255,255,255,.18); border-top-color:#2dd4bf; animation:spin .9s linear infinite}
+    .joining small{display:block; color:#a9b6c9; font-weight:500; font-size:.8rem; margin-top:.25rem}
+    @keyframes spin{to{transform:rotate(360deg)}}
     .cta{margin-top:1rem; width:100%; display:inline-flex; align-items:center; justify-content:center; gap:.55rem;
       padding:.95rem 1.1rem; border:0; border-radius:14px; cursor:pointer;
       background:linear-gradient(140deg,var(--primary),#18a99a); color:#fff; font-family:var(--font);
@@ -103,12 +111,19 @@
     .steps li .t small{display:block; color:var(--muted); font-weight:500; font-size:.8rem; margin-top:.1rem}
     .steps li[data-active]{background:var(--primary-soft)}
     .steps li[data-active] .n{background:var(--primary); color:#fff; border-color:var(--primary)}
+    .steps li[data-analyzing]{background:var(--accent-soft)}
+    .steps li[data-analyzing] .n{background:var(--accent); color:#fff; border-color:var(--accent)}
+    .steps li[data-done] .n{background:var(--ok); color:#fff; border-color:var(--ok)}
     .result{font-size:.92rem; color:var(--muted)}
     .result .decision{font-size:1.6rem; font-weight:800; letter-spacing:-.02em; text-transform:capitalize; margin:.1rem 0 .5rem}
     .result .decision[data-d="pass"]{color:var(--ok)} .result .decision[data-d="fail"]{color:var(--danger)}
     .result .decision[data-d="needs_review"]{color:var(--warn)}
-    .result pre{white-space:pre-wrap; word-break:break-word; background:var(--surface-2); border:1px solid var(--border);
-      border-radius:12px; padding:.8rem; font-size:.78rem; color:#33465f; max-height:280px; overflow:auto; margin:.3rem 0 0}
+    .result .checks{list-style:none; padding:0; margin:.2rem 0 0; display:grid; gap:.4rem}
+    .result .checks li{display:flex; align-items:center; gap:.55rem; font-size:.92rem; color:#33465f}
+    .result .checks li::before{content:""; width:.6rem; height:.6rem; border-radius:50%; background:var(--muted); flex:none}
+    .result .checks li[data-s="pass"]::before{background:var(--ok)}
+    .result .checks li[data-s="fail"]::before{background:var(--danger)}
+    .result .checks li[data-s="unclear"]::before{background:var(--warn)}
     .foot{color:var(--muted); font-size:.8rem; margin-top:1.5rem; text-align:center}
   </style>
 </head>
@@ -122,11 +137,6 @@
   </header>
 
   <main class="wrap">
-    <section class="hero">
-      <h1>Let's verify your identity</h1>
-      <p>A friendly agent will guide you on camera through a few quick checks. It takes about a minute — have your PAN card ready.</p>
-    </section>
-
     <div class="grid">
       <section class="card stage">
         <div class="stage__bar">
@@ -134,11 +144,18 @@
           <span class="pill" id="statusPill"><span class="led"></span><span id="statusText">Ready</span></span>
         </div>
         <form id="enroll" class="enroll" autocomplete="off">
-          <label>Full name<input name="name" type="text" placeholder="As printed on your PAN card" required></label>
+          <label>Full name<input name="name" type="text" maxlength="120" placeholder="As printed on your PAN card" required></label>
           <label>Date of birth<input name="dob" type="date" required></label>
         </form>
         <div class="videoframe">
           <div id="agent"></div>
+          <div class="joining" id="joining" hidden>
+            <div>
+              <div class="ring"></div>
+              <div>Your agent is joining…</div>
+              <small>You'll hear a greeting in a moment</small>
+            </div>
+          </div>
           <div class="placeholder" id="placeholder">
             <div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.5-2.5v9L15 14M4 6h9a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
@@ -156,11 +173,10 @@
         <div class="card pad">
           <h3>What we'll do</h3>
           <ol class="steps" id="steps">
-            <li data-step="card"><span class="n">1</span><span class="t">Snap your PAN card<small>Fit it in the on-screen box and press capture</small></span></li>
-            <li data-step="hologram"><span class="n">2</span><span class="t">Check the hologram<small>Tilt the card side to side</small></span></li>
-            <li data-step="liveness"><span class="n">3</span><span class="t">Quick liveness check<small>Blink or turn your head when asked</small></span></li>
-            <li data-step="face"><span class="n">4</span><span class="t">Face match<small>Hold the card next to your face</small></span></li>
-            <li data-step="match"><span class="n">5</span><span class="t">Match your details<small>Card is checked against the name and date of birth you entered</small></span></li>
+            <li data-step="hologram"><span class="n">1</span><span class="t">Check the hologram<small>Hold your PAN card in the box, front facing the camera, and tilt it slowly — it records automatically</small></span></li>
+            <li data-step="card"><span class="n">2</span><span class="t">Snap your PAN card<small>Hold it flat and still in the box — it snaps automatically</small></span></li>
+            <li data-step="match"><span class="n">3</span><span class="t">Match your details<small>The card is checked against the name and date of birth you entered — nothing is read aloud</small></span></li>
+            <li data-step="liveness"><span class="n">4</span><span class="t">Liveness check<small>Look at the camera and turn your head slowly left, then right — it records automatically</small></span></li>
           </ol>
         </div>
         <div class="card pad">
@@ -189,32 +205,104 @@
       if (tone) statusPill.dataset.tone = tone; else statusPill.removeAttribute("data-tone");
     }
 
+    // The person sees the outcome the way the agent says it - a verdict and which
+    // checks passed - never the raw result object (that goes to the server only).
+    const DECISION_LABELS = { pass: "Verified", fail: "Not verified", needs_review: "Couldn't complete" };
+    const CHECK_LABELS = { hologram: "Hologram", card_read: "Card read", name_match: "Details match", face_liveness: "Liveness" };
+    const STATUS_WORDS = { pass: "passed", fail: "failed", unclear: "not confirmed" };
     function renderResult(value) {
       result.replaceChildren();
       const decision = document.createElement("p");
       decision.className = "decision";
       decision.dataset.d = value.decision;
-      decision.textContent = String(value.decision || "").replace("_", " ");
-      const details = document.createElement("pre");
-      details.textContent = JSON.stringify(value, null, 2);
-      result.append(decision, details);
+      decision.textContent = DECISION_LABELS[value.decision] ?? String(value.decision || "").replace("_", " ");
+      const checks = document.createElement("ul");
+      checks.className = "checks";
+      for (const [key, label] of Object.entries(CHECK_LABELS)) {
+        const check = value.checks?.[key];
+        if (!check || check.status === "skipped") continue;
+        const item = document.createElement("li");
+        item.dataset.s = check.status;
+        item.textContent = `${label}: ${STATUS_WORDS[check.status] ?? check.status}`;
+        checks.append(item);
+      }
+      result.append(decision, checks);
+      // Fallback hang-up: long enough for a three-sentence goodbye to play out.
+      clearTimeout(endTimer);
+      endTimer = setTimeout(endCall, 30_000);
     }
 
-    // The KYC agent decides its own pace; we highlight steps heuristically from
-    // the on-page hints so the person always sees roughly where they are.
+    // Everything before the agent's voice actually plays is "Connecting" — a
+    // subscribed track or an open room is not a conversation yet. Once the
+    // voice arrives, the agent itself drives the status and the step list
+    // through its markStep tool calls.
+    let voiceArrived = false;
+    let agent = null;
+    let endTimer = null;
+    const joining = document.querySelector("#joining");
+
+    // The verification is a bounded call: once the result is in and the agent has
+    // said goodbye, hang up. The worker tells us the moment the agent finishes its
+    // closing line ("call_ended"); the timer is only a fallback if that never comes.
+    async function endCall() {
+      clearTimeout(endTimer);
+      endTimer = null;
+      if (!agent || agent.stopped) return;
+      setStatus("Verification complete — call ended");
+      try { await agent.stop(); } catch { /* already gone */ }
+    }
     function handleEvent(event) {
       switch (event?.type) {
         case "connecting": setStatus("Connecting…", "busy"); break;
-        case "mic_started": setStatus("Microphone on", "busy"); break;
-        case "camera_started": setStatus("Camera on — get ready", "live"); placeholder.hidden = true; break;
+        case "mic_started": setStatus("Connecting…", "busy"); break;
+        case "camera_started": placeholder.hidden = true; setStatus("Agent is joining…", "busy"); break;
         case "camera_unavailable": setStatus("Camera blocked", "warn"); break;
-        case "agent_audio": setStatus("Agent is speaking", "live"); break;
-        case "live": setStatus("Live — the agent is listening", "live"); break;
-        case "ended": setStatus("Session ended"); break;
+        case "live": if (!voiceArrived) setStatus("Agent is joining…", "busy"); break;
+        // The spinner stays up until the agent's voice is actually heard — that is
+        // the moment the person knows the call has truly begun.
+        case "agent_speaking": voiceArrived = true; joining.hidden = true; setStatus("Live — the agent is with you", "live"); break;
+        case "ended": joining.hidden = true; if (!endTimer && statusText.textContent !== "Verification complete — call ended") setStatus("Session ended"); break;
+        // The worker says the goodbye has drained on ITS side; the browser is still
+        // playing the last of it. Give the audio a beat before leaving the room.
+        case "call_ended": setTimeout(endCall, 1_500); break;
+        // The worker's model provider refused a call (billing / quota / key). Show
+        // the real reason instead of leaving the person with a silent agent.
+        case "provider_error": {
+          const label = { billing: "Model provider: payment required", quota: "Model provider: usage limit hit", auth: "Model provider: key rejected" }[event.kind] || "Model provider error";
+          setStatus(label, "error");
+          if (!result.querySelector(".decision")) result.textContent = `${label}. ${String(event.message || "").slice(0, 300)}`;
+          break;
+        }
         case "tool_call":
           if (event.name === "submitResult") setStatus("Finishing up…", "busy");
           break;
       }
+    }
+
+    // The agent reports its own progress through the markStep tool; the side
+    // checklist and the status pill simply mirror those calls.
+    const stepLabels = {
+      card: "Snapping your card",
+      hologram: "Checking the hologram",
+      match: "Matching your details",
+      liveness: "Liveness check",
+    };
+    function handleStep(step, state) {
+      for (const li of document.querySelectorAll("#steps li")) {
+        if (li.dataset.step !== step) {
+          delete li.dataset.active;
+          delete li.dataset.analyzing;
+          continue;
+        }
+        delete li.dataset.active;
+        delete li.dataset.analyzing;
+        if (state === "active") li.dataset.active = "";
+        if (state === "analyzing") li.dataset.analyzing = "";
+        if (state === "done") { li.dataset.done = ""; li.querySelector(".n").textContent = "✓"; }
+      }
+      if (state === "active") setStatus(stepLabels[step] ?? "Working…", "live");
+      if (state === "analyzing") setStatus("Analyzing…", "busy");
+      if (state === "done") setStatus("Live — the agent is with you", "live");
     }
 
     // The session can only start once both identity fields are filled in.
@@ -229,6 +317,7 @@
 
     startButton.onclick = async () => {
       startButton.disabled = true;
+      joining.hidden = false;
       setStatus("Starting…", "busy");
       const fd = new FormData(enroll);
       const expected = {
@@ -237,12 +326,19 @@
       };
       // Lock the claimed identity for the session so it can't change mid-call.
       for (const el of enroll.elements) el.disabled = true;
-      const config = createKycConfig({ onResult: renderResult, expected });
+      const config = createKycConfig({
+        onResult: renderResult,
+        onStep: handleStep,
+        expected,
+        // Lets the flow watchdog reach the worker before any tool has run.
+        sendData: (message) => agent?.bridge?.sendData(message),
+      });
       const innerOnEvent = config.onEvent;
-      const agent = RumikAgent.create({
+      agent = RumikAgent.create({
         ...config,
         onEvent(event) { innerOnEvent?.(event); handleEvent(event); },
         onError(error) {
+          joining.hidden = true;
           setStatus("Error", "error");
           result.textContent = error?.message ?? "Something went wrong.";
           startButton.disabled = false;

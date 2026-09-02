@@ -137,3 +137,20 @@ async def test_still_chunks_reject_malformed_or_oversized_payloads() -> None:
     assert not await bridge.handle_message({"type": "still", "id": "s1", "seq": 0, "total": 1, "data": "not base64!!"})
     assert bridge.pop_still("s1") is None
     assert bridge.pop_still(None) is None
+
+
+@pytest.mark.asyncio
+async def test_partial_still_uploads_are_bounded_by_eviction() -> None:
+    bridge = ClientToolBridge(lambda payload: None)
+
+    # A hostile client opens many half-finished uploads; only the newest few
+    # in-progress ids may be kept, so memory stays bounded.
+    for index in range(50):
+        await bridge.handle_message(
+            {"type": "still", "id": f"s{index}", "seq": 0, "total": 2, "data": "ZmFr"}
+        )
+    assert len(bridge._still_chunks) <= 8
+
+    # The newest upload can still complete after the flood.
+    await bridge.handle_message({"type": "still", "id": "s49", "seq": 1, "total": 2, "data": "ZQ=="})
+    assert bridge.pop_still("s49") == b"fake"

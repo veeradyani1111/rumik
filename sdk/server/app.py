@@ -88,6 +88,16 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
                     await database.close()
 
     app = FastAPI(title="Rumik Agent Platform", version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def no_stale_assets(request: Request, call_next):
+        # StaticFiles sends only ETag/Last-Modified, so browsers cache the landing,
+        # docs and SDK JavaScript heuristically and keep showing stale copies after a
+        # deploy (seen live: an edited landing page still rendering the old block).
+        # no-cache forces revalidation; ETags keep unchanged files cheap (304).
+        response = await call_next(request)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:8000", "http://localhost:8001", "http://127.0.0.1:8000", "http://127.0.0.1:8001"],
@@ -105,11 +115,23 @@ def create_app(*, settings=None, accounts=None, database=None, broker=None) -> F
 
     @app.get("/health")
     async def health():
+        llm_model = {
+            "gemini": settings.gemini_llm_model,
+            "cerebras": settings.cerebras_llm_model,
+        }.get(settings.llm_provider, settings.llm_model)
+        stt_provider = settings.resolved_stt_provider
+        stt_model = settings.stt_model_name()
         return {
             "status": "ok",
             "livekit": bool(settings.livekit_url and settings.livekit_api_key),
             "rumik": bool(settings.rumik_api_key and settings.rumik_gateway_url),
             "sessions": broker.runner.active_count(),
+            # What the NEXT session will run on (from .env at platform start).
+            "models": {
+                "llm": f"{settings.llm_provider}:{llm_model}",
+                "stt": f"{stt_provider}:{stt_model}",
+                "tts": f"rumik:{settings.rumik_tts_model}/{settings.rumik_tts_speaker}",
+            },
         }
 
     @app.post("/signup", status_code=201)

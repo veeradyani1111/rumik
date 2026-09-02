@@ -26,6 +26,9 @@ class ToolSchema(BaseModel):
     description: str = Field(min_length=1)
     parameters: dict[str, Any] = Field(default_factory=dict)
     timeout_secs: float = Field(default=15.0, ge=1.0, le=120.0)
+    # False = the call survives a barge-in (runs async on the worker). Flows through
+    # to WorkerTool.cancel_on_interruption.
+    cancel_on_interruption: bool = True
 
 
 class SessionRequest(BaseModel):
@@ -103,9 +106,28 @@ class Broker:
             "sample_policy": asdict(policy),
             "llm_model": self.settings.llm_model,
             "stt_model": self.settings.stt_model,
+            # Optional fixed opening line, spoken via TTS the moment the person
+            # joins (see AgentConfig.greeting). Lives in free-form options so the
+            # session schema stays unchanged for existing callers.
+            "greeting": str(request.options.get("greeting") or "")[:600],
+            "client_version": str(request.options.get("client_version") or "")[:80],
         }
         secrets = {
             "OPENAI_API_KEY": self.settings.openai_api_key,
+            "LLM_PROVIDER": self.settings.llm_provider,
+            "STT_PROVIDER": self.settings.stt_provider,
+            "CEREBRAS_API_KEY": self.settings.cerebras_api_key,
+            "CEREBRAS_LLM_MODEL": self.settings.cerebras_llm_model,
+            "GEMINI_API_KEY": self.settings.gemini_api_key,
+            "GEMINI_LLM_MODEL": self.settings.gemini_llm_model,
+            "GEMINI_STT_MODEL": self.settings.gemini_stt_model,
+            "GEMINI_STT_MODE": self.settings.gemini_stt_mode,
+            "GEMINI_LIVE_STT_MODEL": self.settings.gemini_live_stt_model,
+            "DEEPGRAM_API_KEY": self.settings.deepgram_api_key,
+            "DEEPGRAM_STT_MODEL": self.settings.deepgram_stt_model,
+            "SARVAM_API_KEY": self.settings.sarvam_api_key,
+            "SARVAM_STT_MODEL": self.settings.sarvam_stt_model,
+            "RUMIK_TTS_STREAM_SENTENCES": "1" if self.settings.rumik_tts_stream_sentences else "0",
             "RUMIK_API_KEY": self.settings.rumik_api_key,
             "RUMIK_GATEWAY_URL": self.settings.rumik_gateway_url,
             # Propagate the configured TTS voice to the worker. Without this the
