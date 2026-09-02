@@ -1,6 +1,6 @@
 fastapi==0.135.3
 uvicorn[standard]==0.52.4
-pipecat-ai[livekit,openai,silero,deepgram,sarvam]==1.3.0
+pipecat-ai[livekit,openai,silero,deepgram,sarvam,google]==1.3.0
 pipecat-rumik==0.1.4
 livekit-api==1.2.1
 openai==2.54.0
