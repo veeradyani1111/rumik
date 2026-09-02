@@ -38,3 +38,16 @@ def test_factory_sanitizes_aggregated_text_before_synthesis() -> None:
 
     assert aggregation_type == "*"
     assert asyncio.run(transform("**Result** 1234", "sentence")) == '[neutral] Result "1234"'
+
+
+def test_factory_can_force_neutral_delivery_for_a_session() -> None:
+    settings = Settings(
+        _env_file=None,
+        rumik_api_key="rumik-key",
+        rumik_gateway_url="https://rumik.example",
+    )
+
+    service = create_rumik_tts(settings, force_tone="neutral")
+    _aggregation_type, transform = service._text_transforms[0]
+
+    assert asyncio.run(transform("[excited] Let's begin!", "sentence")) == "[neutral] Let's begin!"

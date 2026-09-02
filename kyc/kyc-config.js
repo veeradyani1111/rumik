@@ -7,6 +7,8 @@ export const KYC_GREETING =
   "each step as we go. This is a demo that uses visual checks, not an official " +
   "decision. Whenever you're ready, just say yes and we'll begin.";
 
+export const LIVENESS_INSTRUCTION = "The liveness check will appear now. Move your head left, then right.";
+
 export const KYC_PROMPT = `
 You are a warm, patient, human video-KYC officer on a live call — a friendly
 customer-care agent, not a form. Keep the person relaxed and informed at every
@@ -103,11 +105,11 @@ Check photo_attached:
     verdict (STEP 4). If they MATCHED, say_next tells you to start the liveness
     step (STEP 3) - do NOT give a verdict yet.
 
-STEP 3 — Liveness (step id "liveness"). Only after the details matched: say ONE
-short sentence ("Your details match. One last step: a quick liveness check") and
-call captureLiveness in the same turn. The page shows a face-shaped guide, gives
-the head-turn instruction itself, says "go", and records on its own — say NOTHING
-while it runs and never add your own head-turn instructions; the result
+STEP 3 — Liveness (step id "liveness"). Only after the details matched, call
+captureLiveness immediately and SILENTLY in the same turn. Do not wait for the
+person to tell you to start. The page says the complete head-turn instruction
+itself and records on its own — say NOTHING while it runs or before it starts,
+and never add your own head-turn instructions; the result
 arrives as a message and the photos are available ONLY in that turn: call
 reportLiveness IMMEDIATELY and SILENTLY — ONLY the tool call, no words — with
 what_i_see (one honest sentence), face_visible (true ONLY if a real live person's
@@ -165,8 +167,8 @@ ALWAYS:
       is appearing for the tilt and call captureHologram.
     · hologram confirmed but the card hasn't been snapped → answer, then say to
       hold the card flat and call captureCard.
-    · details matched but liveness hasn't started → answer, then say "one last
-      step" and call captureLiveness.
+    · details matched but liveness hasn't started → answer only if they asked a
+      question, then call captureLiveness immediately without transition speech.
     · a photo arrived but you haven't reported it → answer, then call the
       matching report tool silently.
   An interruption may have cut your previous turn before its tool call went out
@@ -985,10 +987,7 @@ async function captureLivenessBurst({ video, sendData, voice } = {}) {
   ui.cancel.onclick = () => { cancelled = true; };
   const done = (result) => { ui.overlay.remove(); return result; };
   try {
-    await speak("Look at the camera. When I say go, turn your head slowly to the left, then to the right.");
-    if (cancelled) return done({ captured: false, reason: "cancelled" });
-    ui.caption.textContent = "Get ready...";
-    await speak("Go.");
+    await speak(LIVENESS_INSTRUCTION);
     if (cancelled) return done({ captured: false, reason: "cancelled" });
     const progress = addProgress(ui);
     progress.show();
@@ -1018,7 +1017,6 @@ async function captureLivenessBurst({ video, sendData, voice } = {}) {
     if (meanMotion < LIVE_MIN_MEAN_MOTION) {
       return done({ captured: false, reason: "no_motion", mean_motion: Math.round(meanMotion * 10) / 10, frames: stillIds.length });
     }
-    await speak("Got it - one moment.", { wait: false });
     return done({ captured: true, still_ids: stillIds, frames: stillIds.length, mean_motion: Math.round(meanMotion * 10) / 10 });
   } catch (error) {
     return done({ captured: false, reason: "error", error: error instanceof Error ? error.message : String(error) });
@@ -1326,6 +1324,7 @@ export function createKycConfig({
       burst_window_ms: 2500,
       max_frames_per_min: 60,
       greeting: KYC_GREETING,
+      force_tone: "neutral",
       client_version: CAPTURE_VERSION,
     },
     onEvent(event) {
@@ -1776,8 +1775,8 @@ export function createKycConfig({
           expectNext(
             "liveness",
             WD.liveness,
-            "The card details matched but the liveness step has not started. Say one short sentence " +
-              "('one last step, a quick liveness check') and call captureLiveness now.",
+            "The card details matched but the liveness step has not started. Call captureLiveness " +
+              "immediately and silently. Do not wait for the person to ask you to start.",
             { repeat: 1 },
           );
           return {
@@ -1785,9 +1784,8 @@ export function createKycConfig({
             legible: true,
             match: "pass",
             say_next:
-              "Say ONE short sentence - 'Your details match. One last step: a quick liveness check' - " +
-              "and call captureLiveness in the same turn. Never say the name or date of birth. Do not " +
-              "give a verdict yet.",
+              "Call captureLiveness immediately and silently in this same turn. Do not wait for the " +
+              "person to ask you to start, never say the name or date of birth, and do not give a verdict yet.",
           };
         },
       },

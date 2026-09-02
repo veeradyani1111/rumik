@@ -9,6 +9,10 @@ def test_sanitize_preserves_supported_leading_tone() -> None:
     assert sanitize("[happy] Great news!") == "[happy] Great news!"
 
 
+def test_sanitize_can_force_neutral_delivery() -> None:
+    assert sanitize("[happy] Great news!", force_tone="neutral") == "[neutral] Great news!"
+
+
 def test_sanitize_quotes_unquoted_digit_sequences_for_speech() -> None:
     text = sanitize("[neutral] PAN digits are 1234 and DOB is 30/08/2000.")
 

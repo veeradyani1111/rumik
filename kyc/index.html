@@ -258,8 +258,9 @@
         case "camera_started": placeholder.hidden = true; setStatus("Agent is joining…", "busy"); break;
         case "camera_unavailable": setStatus("Camera blocked", "warn"); break;
         case "live": if (!voiceArrived) setStatus("Agent is joining…", "busy"); break;
-        // The spinner stays up until the agent's voice is actually heard — that is
-        // the moment the person knows the call has truly begun.
+        // The audio track arrives before the fixed greeting is queued. End the
+        // joining state here so the greeting never plays under a stale spinner.
+        case "agent_audio": voiceArrived = true; joining.hidden = true; setStatus("Live — the agent is with you", "live"); break;
         case "agent_speaking": voiceArrived = true; joining.hidden = true; setStatus("Live — the agent is with you", "live"); break;
         case "ended": joining.hidden = true; if (!endTimer && statusText.textContent !== "Verification complete — call ended") setStatus("Session ended"); break;
         // The worker says the goodbye has drained on ITS side; the browser is still

@@ -4,7 +4,7 @@ import asyncio
 import json
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 
 from loguru import logger
 from PIL import Image as PILImage
@@ -85,6 +85,7 @@ class AgentConfig(BaseModel):
     # straight to TTS rather than through the LLM, so the greeting is guaranteed
     # to be heard and can never be skipped in favour of an early tool call.
     greeting: str = Field(default="", max_length=600)
+    force_tone: Literal["", "neutral"] = ""
     # Free-form tag from the page (e.g. its capture-code version) so a live run's
     # logs prove which client code was actually running - a stale tab looks
     # exactly like a regression otherwise.
@@ -112,11 +113,12 @@ def build_context(config: AgentConfig) -> LLMContext:
                 required=schema["required"],
             )
         )
-    system_prompt = (
-        f"{config.prompt.strip()}\n\n"
-        "When the session starts, proactively greet the user and begin the requested workflow.\n\n"
-        f"{SYSTEM_PROMPT_FRAGMENT}"
+    greeting_instruction = (
+        "The fixed greeting is handled separately. Do not greet the user again; continue from it."
+        if config.greeting
+        else "When the session starts, proactively greet the user and begin the requested workflow."
     )
+    system_prompt = f"{config.prompt.strip()}\n\n{greeting_instruction}\n\n{SYSTEM_PROMPT_FRAGMENT}"
     return LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=ToolsSchema(standard_tools=tools),
@@ -246,7 +248,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
             api_key=settings.openai_api_key,
             settings=OpenAILLMService.Settings(model=config.llm_model),
         )
-    tts = create_rumik_tts(settings, voice=config.voice)
+    tts = create_rumik_tts(settings, voice=config.voice, force_tone=config.force_tone or None)
     context = build_context(config)
     # Pipecat 1.3.0 defaults the user-turn-stop decision to an ML model
     # (LocalSmartTurnAnalyzerV3). For a KYC flow we want a deterministic,

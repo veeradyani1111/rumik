@@ -110,6 +110,7 @@ class Broker:
             # joins (see AgentConfig.greeting). Lives in free-form options so the
             # session schema stays unchanged for existing callers.
             "greeting": str(request.options.get("greeting") or "")[:600],
+            "force_tone": "neutral" if request.options.get("force_tone") == "neutral" else "",
             "client_version": str(request.options.get("client_version") or "")[:80],
         }
         secrets = {

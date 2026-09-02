@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   KYC_PROMPT,
@@ -22,10 +23,25 @@ import {
 import { createNarrator } from "../../kyc/kyc-config.js";
 
 
+test("liveness uses one exact spoken instruction and no separate go cue", () => {
+  const source = readFileSync(new URL("../../kyc/kyc-config.js", import.meta.url), "utf8");
+  const expected = "The liveness check will appear now. Move your head left, then right.";
+  const livenessCapture = source.slice(
+    source.indexOf("async function captureLivenessBurst"),
+    source.indexOf("const CHECK_SCHEMA"),
+  );
+
+  assert.ok(source.includes(`LIVENESS_INSTRUCTION = \"${expected}\"`));
+  assert.doesNotMatch(livenessCapture, /await speak\(\"Go\.\"\)/);
+  assert.doesNotMatch(livenessCapture, /await speak\(\"Got it - one moment\.\"/);
+});
+
+
 test("KYC is expressed entirely as a generic prompt and client tool", () => {
   const config = createKycConfig({ fetch: async () => ({ ok: true, json: async () => ({}) }) });
 
   assert.equal(config.vision, true);
+  assert.equal(config.options.force_tone, "neutral");
   assert.match(KYC_PROMPT, /submitResult/);
   assert.match(KYC_PROMPT, /reportCardRead/);
   assert.deepEqual(Object.keys(config.tools), [
@@ -121,7 +137,8 @@ test("hologram first: it gates the card read, with honest retries and an honest 
   // A MATCH does not finalize: it unlocks liveness. The pass comes only after that.
   assert.equal(pass.match, "pass");
   assert.equal(pass.submitted, undefined);
-  assert.match(pass.say_next, /captureLiveness/);
+  assert.match(pass.say_next, /call captureLiveness immediately and silently/i);
+  assert.doesNotMatch(pass.say_next, /say one short sentence/i);
   assert.doesNotMatch(pass.say_next, /VEER|2005/);
   const beforeLive = posts.length;
   // captureLiveness is gated on the match (fails here only for lack of a camera).

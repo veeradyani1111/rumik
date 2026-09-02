@@ -121,3 +121,10 @@ This append-only log records user-authored prompts given to the coding agent in 
 > can really analyze (hologram too). Have the agent announce when it's analyzing,
 > driven by the flow/tools, not hardcoded. Also look for vulnerabilities and fix
 > them.
+
+## 022 - 2026-09-03
+
+> Stop unnecessary laughter, make liveness start immediately with only "The
+> liveness check will appear now. Move your head left, then right.", clear the
+> joining state before the fixed greeting plays, and prevent the greeting from
+> repeating. Verify it, push `main` to both remotes, and deploy immediately.

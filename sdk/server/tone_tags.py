@@ -18,13 +18,18 @@ _LEADING_TONE = re.compile(r"^\[(?:" + "|".join(TONE_TAGS) + r")\]\s*", re.IGNOR
 _UNQUOTED_DIGITS = re.compile(r'(?<!["\d])\d+(?![\d"])')
 
 
-def sanitize(text: str) -> str:
+def sanitize(text: str, *, force_tone: str | None = None) -> str:
     cleaned = text.strip()
     cleaned = re.sub(r"```(?:\w+)?", "", cleaned)
     cleaned = cleaned.replace("`", "").replace("**", "").replace("__", "")
     cleaned = re.sub(r"(?m)^\s*(?:#{1,6}\s+|[-*+]\s+)", "", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned).strip()
     cleaned = _UNQUOTED_DIGITS.sub(lambda match: f'"{match.group(0)}"', cleaned)
-    if not _LEADING_TONE.match(cleaned):
+    if force_tone:
+        if force_tone not in TONE_TAGS:
+            raise ValueError(f"unsupported forced tone: {force_tone}")
+        cleaned = _LEADING_TONE.sub("", cleaned).lstrip()
+        cleaned = f"[{force_tone}] {cleaned}"
+    elif not _LEADING_TONE.match(cleaned):
         cleaned = f"[neutral] {cleaned}"
     return cleaned

@@ -122,7 +122,7 @@ async def test_session_mints_scoped_token_and_spawns_isolated_worker() -> None:
                         "parameters": {"decision": "pass | fail | needs_review"},
                     }
                 ],
-                "options": {"max_fps": 99},
+                "options": {"max_fps": 99, "force_tone": "neutral"},
             },
         )
 
@@ -138,6 +138,7 @@ async def test_session_mints_scoped_token_and_spawns_isolated_worker() -> None:
     assert claims["sub"] == "user"
     assert claims["video"]["room"] == "sess_fixed"
     assert runner.spawned[0][1]["sample_policy"]["max_fps"] == 5
+    assert runner.spawned[0][1]["force_tone"] == "neutral"
     assert runner.spawned[0][1]["tools"][0]["name"] == "submitResult"
     assert runner.spawned[0][2]["OPENAI_API_KEY"] == "openai-secret"
     assert database.sessions[0]["account_id"] == "account-1"

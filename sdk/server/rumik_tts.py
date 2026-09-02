@@ -9,12 +9,11 @@ from .config import Settings
 from .tone_tags import sanitize
 
 
-async def _sanitize_for_tts(text: str, _aggregation_type: object) -> str:
-    return sanitize(text)
-
-
 def create_rumik_tts(
-    settings: Settings, *, voice: Mapping[str, Any] | None = None
+    settings: Settings,
+    *,
+    voice: Mapping[str, Any] | None = None,
+    force_tone: str | None = None,
 ) -> RumikTTSService:
     if not settings.rumik_api_key or not settings.rumik_gateway_url:
         raise ValueError("RUMIK_API_KEY and RUMIK_GATEWAY_URL are required")
@@ -24,11 +23,15 @@ def create_rumik_tts(
         voice=str(override.get("speaker") or override.get("voice") or settings.rumik_tts_speaker),
         description=override.get("description"),
     )
+
+    async def sanitize_for_tts(text: str, _aggregation_type: object) -> str:
+        return sanitize(text, force_tone=force_tone)
+
     return RumikTTSService(
         api_key=settings.rumik_api_key,
         gateway_url=settings.rumik_gateway_url,
         settings=service_settings,
-        text_transforms=[("*", _sanitize_for_tts)],
+        text_transforms=[("*", sanitize_for_tts)],
         # pipecat-rumik defaults to buffering the WHOLE model reply before the
         # first TTS request (to hide Rumik's ~0.3s per-request start-up). That
         # cost 1-3s of dead air on every multi-sentence line. Sentence streaming

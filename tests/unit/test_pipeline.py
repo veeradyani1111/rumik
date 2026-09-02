@@ -54,6 +54,25 @@ def test_context_combines_developer_prompt_tone_contract_and_tools() -> None:
     schemas = context.tools.standard_tools
     assert [schema.name for schema in schemas] == ["look", "submitResult"]
     assert schemas[1].properties["decision"]["enum"] == ["pass", "fail", "needs_review"]
+
+
+def test_context_does_not_request_a_second_greeting_when_one_is_fixed() -> None:
+    config = AgentConfig(
+        room="sess_1",
+        agent_token="token",
+        livekit_url="wss://example.livekit.cloud",
+        prompt="Continue the workflow.",
+        greeting="Welcome to verification.",
+        force_tone="neutral",
+    )
+
+    prompt = build_context(config).messages[0]["content"]
+
+    assert "proactively greet" not in prompt
+    assert "fixed greeting is handled separately" in prompt
+    assert config.force_tone == "neutral"
+
+
 def test_pipeline_builds_all_services_without_connecting_to_network() -> None:
     config = AgentConfig(
         room="sess_1",
