@@ -92,13 +92,13 @@ class AgentController {
           track.attach(this.elements.audio);
         },
       });
-      await this.bridge.connect(session.url, session.token);
-      this._log("info", "connected to room", { room: session.room });
-
+      // Permissions FIRST, room SECOND. The agent greets as soon as a participant
+      // is in the room, so joining before the camera prompt was answered meant
+      // the greeting played over an open permission dialog.
+      let microphone;
       try {
-        await this.bridge.publishMicrophone();
-        this._log("info", "microphone published");
-        this._emit({ type: "mic_started" });
+        microphone = await this.bridge.acquireMicrophone();
+        this._log("info", "microphone ready");
       } catch (cause) {
         const error = Object.assign(new Error("Microphone permission is required"), {
           code: "mic_required",
@@ -108,17 +108,28 @@ class AgentController {
         await this.stop();
         throw error;
       }
-
+      let camera = null;
       if (this.config.vision) {
         try {
-          const camera = await this.bridge.publishCamera();
+          camera = await this.bridge.acquireCamera();
           camera.attach(this.elements.video);
-          this._log("info", "camera published and attached");
-          this._note("");
-          this._emit({ type: "camera_started" });
+          this._log("info", "camera ready and attached");
         } catch (cause) {
           this._cameraUnavailable(cause);
         }
+      }
+
+      await this.bridge.connect(session.url, session.token);
+      this._log("info", "connected to room", { room: session.room });
+
+      await this.bridge.publishTrack(microphone);
+      this._log("info", "microphone published");
+      this._emit({ type: "mic_started" });
+      if (camera) {
+        await this.bridge.publishTrack(camera);
+        this._log("info", "camera published");
+        this._note("");
+        this._emit({ type: "camera_started" });
       }
 
       this._state("live");

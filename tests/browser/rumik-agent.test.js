@@ -29,18 +29,24 @@ test("RumikAgent keeps browser fetch bound to the global owner", async () => {
       json: async () => ({ url: "wss://livekit.example", token: "token", room: "room" }),
     });
   }
+  const order = [];
   class Bridge {
-    async connect() {}
-    async publishMicrophone() { return {}; }
+    async acquireMicrophone() { order.push("mic"); return { attach() {} }; }
+    async acquireCamera() { order.push("camera"); return { attach() {} }; }
+    async connect() { order.push("connect"); }
+    async publishTrack() { order.push("publish"); }
   }
   const agent = RumikAgent.create(
-    { session: "/session", prompt: "Help the user.", vision: false },
+    { session: "/session", prompt: "Help the user.", vision: true },
     { fetch: browserFetch, document, Bridge },
   );
 
   await agent.mount("#agent");
 
   assert.equal(fetchOwner, globalThis);
+  // Permissions are obtained BEFORE the room is joined: the agent greets the
+  // moment a participant appears, so the camera prompt must already be answered.
+  assert.deepEqual(order, ["mic", "camera", "connect", "publish", "publish"]);
 });
 
 

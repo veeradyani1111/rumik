@@ -652,7 +652,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
                 # One compact, greppable line per client-tool result: what happened,
                 # how long the box was open, and why it closed.
                 logger.info(
-                    "CLIENT_TOOL_RESULT tool={} captured={} reason={} elapsed_ms={} frames={} attached={} error={}",
+                    "CLIENT_TOOL_RESULT tool={} captured={} reason={} elapsed_ms={} frames={} attached={} error={} stats={}",
                     tool_name,
                     result.get("captured"),
                     result.get("reason"),
@@ -660,6 +660,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
                     result.get("frames"),
                     result.get("photos_attached"),
                     result.get("error"),
+                    result.get("stats"),
                 )
             # A final result: the model's next response is the spoken verdict, so
             # arm the call-ending logic BEFORE the result reaches the model.
@@ -765,6 +766,12 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
             # append_to_context=False: the aggregator would otherwise ALSO record this
             # as an assistant turn (on top of the note above) - Gemini merged and
             # re-spoke those. The note is the only trace the model sees.
+            # The page is told when the greeting has actually been HEARD (a
+            # "spoken" ack with id "greeting"), so its consent reminder counts
+            # from the end of the greeting - not from session creation, which on
+            # a cold start was long before the agent had even joined and made the
+            # agent ask "let me know when you're ready" right after greeting.
+            narration.request("greeting", config.greeting)
             await worker.queue_frame(TTSSpeakFrame(config.greeting, append_to_context=False))
         else:
             logger.info("queueing LLM greeting for {}", participant_id)

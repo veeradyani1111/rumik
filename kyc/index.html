@@ -94,7 +94,9 @@
     .cta:hover{filter:brightness(1.05)}
     .cta:active{transform:translateY(1px)}
     .cta:disabled{opacity:.55; cursor:default; filter:grayscale(.2)}
-    .enroll{display:grid; grid-template-columns:1.5fr 1fr; gap:.7rem; margin-bottom:1rem}
+    .cta--redo{background:var(--surface-2); color:var(--text); border:1px solid var(--border); box-shadow:none}
+    .cta--redo:hover{filter:none; background:var(--primary-soft); border-color:var(--primary)}
+    .enroll{display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:.7rem; margin-bottom:1rem}
     @media(max-width:560px){.enroll{grid-template-columns:1fr}}
     .enroll label{display:grid; gap:.3rem; font-size:.72rem; font-weight:700; letter-spacing:.02em; color:var(--muted); text-transform:uppercase}
     .enroll input{font-family:var(--font); font-size:.92rem; color:var(--text); background:var(--surface-2);
@@ -146,6 +148,7 @@
         <form id="enroll" class="enroll" autocomplete="off">
           <label>Full name<input name="name" type="text" maxlength="120" placeholder="As printed on your PAN card" required></label>
           <label>Date of birth<input name="dob" type="date" required></label>
+          <label>PAN number<input name="pan" type="text" maxlength="10" placeholder="ABCDE1234F" autocapitalize="characters" spellcheck="false" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]" title="Five letters, four digits, one letter" required></label>
         </form>
         <div class="videoframe">
           <div id="agent"></div>
@@ -167,15 +170,19 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           Start verification
         </button>
+        <button id="redo" class="cta cta--redo" hidden title="Run the verification again with the same details">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          Redo verification
+        </button>
       </section>
 
       <aside class="side">
         <div class="card pad">
           <h3>What we'll do</h3>
           <ol class="steps" id="steps">
-            <li data-step="hologram"><span class="n">1</span><span class="t">Check the hologram<small>Hold your PAN card in the box, front facing the camera, and tilt it slowly — it records automatically</small></span></li>
-            <li data-step="card"><span class="n">2</span><span class="t">Snap your PAN card<small>Hold it flat and still in the box — it snaps automatically</small></span></li>
-            <li data-step="match"><span class="n">3</span><span class="t">Match your details<small>The card is checked against the name and date of birth you entered — nothing is read aloud</small></span></li>
+            <li data-step="card"><span class="n">1</span><span class="t">Snap your PAN card<small>Hold it flat and still in the box, front facing the camera — it snaps automatically</small></span></li>
+            <li data-step="match"><span class="n">2</span><span class="t">Match your details<small>The card is checked against the PAN number, name and date of birth you entered — nothing is read aloud</small></span></li>
+            <li data-step="hologram"><span class="n">3</span><span class="t">Check the hologram<small>Hold the card in the box, hologram side facing the camera, and tilt it slowly — it records automatically</small></span></li>
             <li data-step="liveness"><span class="n">4</span><span class="t">Liveness check<small>Look at the camera and turn your head slowly left, then right — it records automatically</small></span></li>
           </ol>
         </div>
@@ -191,10 +198,16 @@
 
   <script type="module">
     import { RumikAgent } from "/sdk/rumik-agent.js";
-    import { createKycConfig } from "./kyc-config.js";
+    import { createKycConfig, primeCardDetector } from "./kyc-config.js";
+
+    // Start fetching the WebAssembly card detector now, while the person fills
+    // in the form, so the capture boxes have it the moment they open. If it
+    // cannot load, the boxes quietly fall back to the older pixel heuristic.
+    primeCardDetector({ document }).then((ok) => console.info(ok ? "card detector ready" : "card detector unavailable - using heuristic"));
 
     const result = document.querySelector("#result");
     const startButton = document.querySelector("#start");
+    const redoButton = document.querySelector("#redo");
     const statusPill = document.querySelector("#statusPill");
     const statusText = document.querySelector("#statusText");
     const placeholder = document.querySelector("#placeholder");
@@ -208,7 +221,7 @@
     // The person sees the outcome the way the agent says it - a verdict and which
     // checks passed - never the raw result object (that goes to the server only).
     const DECISION_LABELS = { pass: "Verified", fail: "Not verified", needs_review: "Couldn't complete" };
-    const CHECK_LABELS = { hologram: "Hologram", card_read: "Card read", name_match: "Details match", face_liveness: "Liveness" };
+    const CHECK_LABELS = { card_read: "Card read", name_match: "Details match", hologram: "Hologram", face_liveness: "Liveness" };
     const STATUS_WORDS = { pass: "passed", fail: "failed", unclear: "not confirmed" };
     function renderResult(value) {
       result.replaceChildren();
@@ -262,7 +275,12 @@
         // joining state here so the greeting never plays under a stale spinner.
         case "agent_audio": voiceArrived = true; joining.hidden = true; setStatus("Live — the agent is with you", "live"); break;
         case "agent_speaking": voiceArrived = true; joining.hidden = true; setStatus("Live — the agent is with you", "live"); break;
-        case "ended": joining.hidden = true; if (!endTimer && statusText.textContent !== "Verification complete — call ended") setStatus("Session ended"); break;
+        case "ended":
+          joining.hidden = true;
+          if (!endTimer && statusText.textContent !== "Verification complete — call ended") setStatus("Session ended");
+          // The call is over, however it ended: offer a redo with the same details.
+          redoButton.hidden = false;
+          break;
         // The worker says the goodbye has drained on ITS side; the browser is still
         // playing the last of it. Give the audio a beat before leaving the room.
         case "call_ended": setTimeout(endCall, 1_500); break;
@@ -306,24 +324,54 @@
       if (state === "done") setStatus("Live — the agent is with you", "live");
     }
 
-    // The session can only start once both identity fields are filled in.
+    // The session can only start once all three identity fields are filled in and
+    // the PAN has the PAN shape (five letters, four digits, one letter).
+    const PAN_SHAPE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+    const panField = enroll.elements.pan;
     function refreshStartGate() {
       const fd = new FormData(enroll);
-      const filled = (fd.get("name") || "").toString().trim() && (fd.get("dob") || "").toString().trim();
-      startButton.disabled = !filled;
-      startButton.title = filled ? "" : "Enter your full name and date of birth first";
+      const pan = (fd.get("pan") || "").toString().trim().toUpperCase();
+      const filled = (fd.get("name") || "").toString().trim() && (fd.get("dob") || "").toString().trim() && pan;
+      const panOk = PAN_SHAPE.test(pan);
+      startButton.disabled = !(filled && panOk);
+      startButton.title = !filled
+        ? "Enter your full name, date of birth and PAN number first"
+        : !panOk
+          ? "The PAN number should be five letters, four digits and one letter"
+          : "";
     }
     enroll.addEventListener("input", refreshStartGate);
+    panField.addEventListener("input", () => { panField.value = panField.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); });
     refreshStartGate();
 
-    startButton.onclick = async () => {
+    // Put the page back to its pre-call state, keeping the entered details, so
+    // the same person can run the verification again without retyping.
+    function resetForRedo() {
+      clearTimeout(endTimer);
+      endTimer = null;
+      voiceArrived = false;
+      result.textContent = "Not completed yet.";
+      for (const [index, li] of [...document.querySelectorAll("#steps li")].entries()) {
+        delete li.dataset.active;
+        delete li.dataset.analyzing;
+        delete li.dataset.done;
+        li.querySelector(".n").textContent = String(index + 1);
+      }
+      placeholder.hidden = false;
+      joining.hidden = true;
+      setStatus("Ready");
+    }
+
+    async function startSession() {
       startButton.disabled = true;
+      redoButton.hidden = true;
       joining.hidden = false;
       setStatus("Starting…", "busy");
       const fd = new FormData(enroll);
       const expected = {
         name: (fd.get("name") || "").toString().trim(),
         dob: (fd.get("dob") || "").toString().trim(),
+        pan: (fd.get("pan") || "").toString().trim().toUpperCase(),
       };
       // Lock the claimed identity for the session so it can't change mid-call.
       for (const el of enroll.elements) el.disabled = true;
@@ -343,6 +391,7 @@
           setStatus("Error", "error");
           result.textContent = error?.message ?? "Something went wrong.";
           startButton.disabled = false;
+          redoButton.hidden = false;
           for (const el of enroll.elements) el.disabled = false;
         },
       });
@@ -350,6 +399,22 @@
         await agent.mount("#agent");
       } catch (error) {
         console.warn("KYC session did not start:", error?.message ?? error);
+      }
+    }
+
+    startButton.onclick = startSession;
+
+    // Redo: stop whatever is left of the previous call, clear the checklist and
+    // result, and start a fresh session with the details already entered.
+    redoButton.onclick = async () => {
+      redoButton.disabled = true;
+      try {
+        if (agent && !agent.stopped) { try { await agent.stop(); } catch { /* already gone */ } }
+        agent = null;
+        resetForRedo();
+        await startSession();
+      } finally {
+        redoButton.disabled = false;
       }
     };
   </script>

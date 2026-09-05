@@ -8,6 +8,8 @@
   },
   "dependencies": {
     "livekit-client": "2.22.1"
+  },
+  "devDependencies": {
+    "@techstark/opencv-js": "^4.11.0-release.1"
   }
 }
-

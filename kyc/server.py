@@ -115,6 +115,10 @@ def create_app(
     async def kyc_config():
         return FileResponse(ROOT / "kyc-config.js", media_type="text/javascript")
 
+    @app.get("/card-detector.js", include_in_schema=False)
+    async def card_detector():
+        return FileResponse(ROOT / "card-detector.js", media_type="text/javascript")
+
     return app
 
 

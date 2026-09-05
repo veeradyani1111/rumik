@@ -34,3 +34,16 @@ def test_requests_without_id_or_text_are_ignored() -> None:
     acks.request("", "hello")
     acks.request("x", "")
     assert acks.outstanding == 0
+
+
+def test_greeting_ack_matches_the_tagged_tts_text() -> None:
+    # The fixed greeting is registered under id "greeting" so the page learns when
+    # it has been heard; TTS sees it with a forced tone tag in front.
+    from sdk.server.narration import NarrationAcks
+
+    greeting = "Hi there, and welcome! Whenever you're ready, just say yes and we'll begin."
+    acks = NarrationAcks()
+    acks.request("greeting", greeting)
+    assert acks.on_tts_text(f"[neutral] {greeting}") == "greeting"
+    assert acks.on_bot_stopped() == ["greeting"]
+    assert acks.outstanding == 0

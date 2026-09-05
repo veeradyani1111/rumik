@@ -19,6 +19,10 @@ import {
   lumaGrid,
   nameSimilarity,
   normalizeDob,
+  cornerShift,
+  primeCardDetector,
+  quadInsideBox,
+  quadWidth,
 } from "../../kyc/kyc-config.js";
 import { createNarrator } from "../../kyc/kyc-config.js";
 
@@ -55,8 +59,10 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
     "markStep",
     "submitResult",
   ]);
-  // The flow verifies only name + DOB; the PAN number is never collected or matched.
-  assert.deepEqual(config.tools.submitResult.parameters.properties.extracted.required, ["name", "dob"]);
+  // The flow verifies PAN number + name + DOB against the registered claim.
+  assert.deepEqual(config.tools.submitResult.parameters.properties.extracted.required, ["name", "dob", "pan"]);
+  assert.deepEqual(config.tools.reportCardRead.parameters.required, ["what_i_see", "document_type", "legible", "name", "dob", "pan"]);
+  assert.ok(config.tools.reportCardRead.parameters.properties.document_type.enum.includes("pan"));
   // Positioning a card takes human time; the capture tool must outlive the default timeout,
   // and a barge-in while the box is open must not cancel it.
   assert.equal(config.tools.captureCard.timeoutSecs, 75);
@@ -75,123 +81,178 @@ test("KYC is expressed entirely as a generic prompt and client tool", () => {
 });
 
 
-test("hologram first: it gates the card read, with honest retries and an honest give-up", async () => {
-  assert.deepEqual(KYC_STEP_IDS, ["hologram", "card", "match", "liveness"]);
+const CLAIM = { name: "Veeradyani", dob: "2005-03-15", pan: "ABCDE1234F" };
+const CARD = { name: "VEER ADYANI", dob: "15/03/2005", pan: "ABCDE1234F" };
+// Flow state once the PAN card has been read and its details matched.
+const MATCHED = { confirmed: true, cardRead: { ...CARD }, match: "pass", matchVerdict: { name_match: "pass", name_ok: true, dob_ok: true, pan_ok: true } };
+
+test("card first: the PAN read gates the hologram, which gates liveness, with honest retries and give-ups", async () => {
+  assert.deepEqual(KYC_STEP_IDS, ["card", "match", "hologram", "liveness"]);
   assert.match(KYC_PROMPT, /captureHologram/);
   assert.match(KYC_PROMPT, /reportHologram/);
+  assert.match(KYC_PROMPT, /document_type/);
   // The agent must never speak the values; liveness / face match stay out of the flow.
   assert.match(KYC_PROMPT, /never speak the person's name or date of birth aloud/i);
+  assert.match(KYC_PROMPT, /never the PAN number/i);
   assert.doesNotMatch(KYC_PROMPT, /motion=true|liveness challenge/i);
+  // The card step comes first in the prompt, the hologram second.
+  assert.ok(KYC_PROMPT.indexOf("STEP 1 — Card photo") < KYC_PROMPT.indexOf("STEP 2 — Hologram"));
 
   const posts = [];
   const fetchSpy = async (_u, init) => { posts.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ stored: true }) }; };
 
-  // 1) After consent, the CARD box is locked until the hologram is confirmed, and
-  //    reportHologram refuses without a tilt burst from the current attempt.
-  const a = createKycConfig({ expected: { name: "Veeradyani", dob: "2005-03-15" }, flowState: { confirmed: true }, fetch: fetchSpy });
+  // 1) After consent, the CARD box opens (fails here only for lack of a camera) while
+  //    the hologram tilt and liveness are locked until the card is read and matched.
+  const a = createKycConfig({ expected: CLAIM, flowState: { confirmed: true }, fetch: fetchSpy });
   a.onEvent({ type: "session_started", room: "sess_h1" });
-  const locked = await a.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
-  assert.equal(locked.reason, "hologram_not_confirmed");
-  const noFrames = await a.tools.reportHologram.handler({ what_i_see: "nothing", seen: true });
+  const open = await a.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(open.reason, "no_camera_frame");
+  const lockedHolo = await a.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(lockedHolo.reason, "match_not_passed");
+  assert.match(lockedHolo.say_next, /captureCard/);
+  const lockedGiveUp = await a.tools.reportHologram.handler({ what_i_see: "x", card_visible: false, seen: false, give_up: true });
+  assert.equal(lockedGiveUp.accepted, false);
+  assert.equal(lockedGiveUp.reason, "match_not_passed");
+  const lockedLive = await a.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(lockedLive.reason, "match_not_passed");
+  assert.equal(posts.length, 0);
+
+  // 2) Only a PAN card is accepted: another document, or a number that isn't in the
+  //    PAN format, means "retake" with the right coaching - never a verdict.
+  const b = createKycConfig({ expected: CLAIM, flowState: { confirmed: true, cardCaptured: true }, fetch: fetchSpy });
+  b.onEvent({ type: "session_started", room: "sess_h2" });
+  const aadhaar = await b.tools.reportCardRead.handler(
+    { what_i_see: "an Aadhaar card with a 12-digit number", document_type: "aadhaar", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "" },
+    { sendData: async () => {} },
+  );
+  assert.equal(aadhaar.accepted, false);
+  assert.equal(aadhaar.legible, false);
+  assert.equal(aadhaar.document_type, "aadhaar");
+  assert.match(aadhaar.reason, /Aadhaar card, not a PAN card/);
+  assert.match(aadhaar.say_next, /doesn't look like a PAN card/);
+  assert.match(aadhaar.say_next, /captureCard again/);
+  assert.equal(posts.length, 0, "a wrong document is not a verdict");
+  const b2 = createKycConfig({ expected: CLAIM, flowState: { confirmed: true, cardCaptured: true }, fetch: fetchSpy });
+  b2.onEvent({ type: "session_started", room: "sess_h2b" });
+  const badPan = await b2.tools.reportCardRead.handler(
+    { what_i_see: "front of a PAN card, the number is smudged", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "ABCD1234" },
+    { sendData: async () => {} },
+  );
+  assert.equal(badPan.accepted, false);
+  assert.match(badPan.reason, /not in the PAN format/);
+  assert.match(badPan.say_next, /captureCard again/);
+  assert.equal(posts.length, 0);
+  // The hologram stays locked after a failed read.
+  const stillLocked = await b2.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(stillLocked.reason, "match_not_passed");
+
+  // 3) A legible PAN read that MATCHES unlocks the hologram (not liveness, no verdict).
+  const c = createKycConfig({ expected: CLAIM, flowState: { confirmed: true, cardCaptured: true }, fetch: fetchSpy });
+  c.onEvent({ type: "session_started", room: "sess_h3" });
+  const matched = await c.tools.reportCardRead.handler(
+    { what_i_see: "front of a PAN card, sharp", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "abcde 1234 f" },
+    { sendData: async () => {} },
+  );
+  assert.equal(matched.accepted, true);
+  assert.equal(matched.match, "pass");
+  assert.equal(matched.submitted, undefined);
+  assert.match(matched.say_next, /details match/);
+  assert.match(matched.say_next, /captureHologram/);
+  assert.doesNotMatch(matched.say_next, /captureLiveness/);
+  assert.doesNotMatch(matched.say_next, /VEER|2005|ABCDE/);
+  assert.equal(posts.length, 0, "a match does not finalize");
+  // Hologram box now opens (fails here only for lack of a camera, not the gate);
+  // the card box refuses a second read; liveness is still locked.
+  const holoOpen = await c.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(holoOpen.reason, "no_camera_frame");
+  const reread = await c.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(reread.reason, "already_read");
+  const liveLocked = await c.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(liveLocked.reason, "hologram_not_confirmed");
+  const noFrames = await c.tools.reportHologram.handler({ what_i_see: "nothing", card_visible: true, seen: true });
   assert.equal(noFrames.accepted, false);
   assert.equal(noFrames.reason, "no_tilt_frames");
 
-  // 2) Not seen → retry offered (NOT finalized); then seen → the card step unlocks.
-  const b = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologramCaptured: true, holoAttempts: 1 },
-    fetch: fetchSpy,
-  });
-  b.onEvent({ type: "session_started", room: "sess_h2" });
-  const notSeen = await b.tools.reportHologram.handler({ what_i_see: "a flat card, no shine changed", seen: false });
+  // 3b) A PAN number that does not match the registered one is a hard FAIL, named
+  //     as the culprit without ever speaking the values.
+  const c2 = createKycConfig({ expected: CLAIM, flowState: { confirmed: true, cardCaptured: true }, fetch: fetchSpy });
+  c2.onEvent({ type: "session_started", room: "sess_h3b" });
+  const wrongPan = await c2.tools.reportCardRead.handler(
+    { what_i_see: "front of a PAN card, sharp", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "ZZZZZ9999Z" },
+    { sendData: async () => {} },
+  );
+  assert.equal(wrongPan.submitted, true);
+  assert.equal(wrongPan.decision, "fail");
+  assert.deepEqual(wrongPan.mismatched_fields, ["PAN number"]);
+  assert.match(wrongPan.say_next, /the PAN number on the card does NOT match what they entered \(the name and the date of birth do\)/);
+  assert.doesNotMatch(wrongPan.say_next, /ZZZZZ|ABCDE|VEER|2005/);
+  assert.equal(posts.at(-1).decision, "fail");
+  assert.equal(posts.at(-1).checks.name_match.status, "fail");
+  assert.match(posts.at(-1).checks.name_match.reasons[0], /PAN mismatched/);
+  // The stored record never holds the full PAN.
+  assert.deepEqual(posts.at(-1).extracted, { name: "VEER ADYANI", dob: "15/03/2005", pan: "ZZ*******Z" });
+  const beforeHolo = posts.length;
+
+  // 4) Hologram: not seen → retry offered (NOT finalized); seen → liveness starts silently.
+  const d = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, hologramCaptured: true, holoAttempts: 1 }, fetch: fetchSpy });
+  d.onEvent({ type: "session_started", room: "sess_h4" });
+  const notSeen = await d.tools.reportHologram.handler({ what_i_see: "a flat card, no shine changed", card_visible: true, seen: false });
   assert.equal(notSeen.accepted, true);
   assert.equal(notSeen.seen, false);
   assert.equal(notSeen.last_attempt, false);
   assert.match(notSeen.say_next, /try once more/i);
-  assert.equal(posts.length, 0, "not finalized on a retryable miss");
-  const b2 = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologramCaptured: true, holoAttempts: 2 },
-    fetch: fetchSpy,
-  });
-  b2.onEvent({ type: "session_started", room: "sess_h3" });
-  const seen = await b2.tools.reportHologram.handler({ what_i_see: "a rainbow shine sweeps across the emblem", seen: true });
+  assert.equal(posts.length, beforeHolo, "not finalized on a retryable miss");
+  const d2 = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, hologramCaptured: true, holoAttempts: 2 }, fetch: fetchSpy });
+  d2.onEvent({ type: "session_started", room: "sess_h4b" });
+  const seen = await d2.tools.reportHologram.handler({ what_i_see: "a rainbow shine sweeps across the emblem", card_visible: true, seen: true });
   assert.equal(seen.seen, true);
-  assert.match(seen.say_next, /hologram checked out/);
-  assert.match(seen.say_next, /captureCard/);
-  // Card box now opens (fails here only for lack of a camera, not the gate).
-  const unlocked = await b2.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
-  assert.equal(unlocked.reason, "no_camera_frame");
-
-  // 2b) With the hologram confirmed, a legible read compares + finalizes in ONE go.
-  const d = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologram: "pass", holoSeen: "rainbow shine", cardCaptured: true },
-    fetch: fetchSpy,
-  });
-  d.onEvent({ type: "session_started", room: "sess_h3b" });
-  const pass = await d.tools.reportCardRead.handler(
-    { what_i_see: "front of a PAN card, sharp", legible: true, name: "VEER ADYANI", dob: "15/03/2005" },
-    { sendData: async () => {} },
-  );
-  // A MATCH does not finalize: it unlocks liveness. The pass comes only after that.
-  assert.equal(pass.match, "pass");
-  assert.equal(pass.submitted, undefined);
-  assert.match(pass.say_next, /call captureLiveness immediately and silently/i);
-  assert.doesNotMatch(pass.say_next, /say one short sentence/i);
-  assert.doesNotMatch(pass.say_next, /VEER|2005/);
-  const beforeLive = posts.length;
-  // captureLiveness is gated on the match (fails here only for lack of a camera).
-  const live = await d.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
+  assert.match(seen.say_next, /call captureLiveness immediately and silently/i);
+  assert.doesNotMatch(seen.say_next, /say one short sentence/i);
+  assert.equal(posts.length, beforeHolo, "a confirmed hologram does not finalize");
+  // captureLiveness is gated on the hologram (fails here only for lack of a camera).
+  const live = await d2.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
   assert.equal(live.reason, "no_camera_frame");
-  // Emulate captured liveness frames, then a confirmed head turn → final PASS.
-  const e = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologram: "pass", holoSeen: "rainbow shine", cardRead: { name: "VEER ADYANI", dob: "15/03/2005" }, match: "pass", matchVerdict: { name_match: "pass", name_ok: true, dob_ok: true }, livenessCaptured: true, liveAttempts: 1 },
-    fetch: fetchSpy,
-  });
-  e.onEvent({ type: "session_started", room: "sess_h3c" });
+  const holoAgain = await d2.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(holoAgain.reason, "already_confirmed");
+  assert.match(holoAgain.say_next, /captureLiveness/);
+
+  // 5) Liveness: a miss offers a retry; a confirmed head turn → final PASS.
+  const e = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, hologram: "pass", holoSeen: "rainbow shine", livenessCaptured: true, liveAttempts: 1 }, fetch: fetchSpy });
+  e.onEvent({ type: "session_started", room: "sess_h5" });
   const notMoved = await e.tools.reportLiveness.handler({ what_i_see: "a face looking straight ahead in every frame", face_visible: true, moved: false });
   assert.equal(notMoved.moved, false);
   assert.match(notMoved.say_next, /try once more/i);
-  assert.equal(posts.length, beforeLive, "not finalized on a retryable miss");
-  const e2 = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologram: "pass", holoSeen: "rainbow shine", cardRead: { name: "VEER ADYANI", dob: "15/03/2005" }, match: "pass", matchVerdict: { name_match: "pass", name_ok: true, dob_ok: true }, livenessCaptured: true, liveAttempts: 2 },
-    fetch: fetchSpy,
-  });
-  e2.onEvent({ type: "session_started", room: "sess_h3d" });
+  assert.equal(posts.length, beforeHolo, "not finalized on a retryable miss");
+  const e2 = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, hologram: "pass", holoSeen: "rainbow shine", livenessCaptured: true, liveAttempts: 2 }, fetch: fetchSpy });
+  e2.onEvent({ type: "session_started", room: "sess_h5b" });
   const moved = await e2.tools.reportLiveness.handler({ what_i_see: "the same face turns left then right", face_visible: true, moved: true }, { sendData: async () => {} });
   assert.equal(moved.submitted, true);
   assert.equal(moved.decision, "pass");
   assert.equal(moved.call_ending, true);
+  assert.match(moved.say_next, /PAN number, name and date of birth on the card match/);
+  assert.match(moved.say_next, /hologram checked out/);
   assert.match(moved.say_next, /liveness check passed/);
-  assert.match(moved.say_next, /NEVER say the name or the date of birth/);
+  assert.match(moved.say_next, /NEVER say the name, the date of birth or the PAN number/);
   const finalPost = posts.at(-1);
   assert.equal(finalPost.decision, "pass");
-  assert.equal(finalPost.checks.hologram.status, "pass");
   assert.equal(finalPost.checks.card_read.status, "pass");
+  assert.equal(finalPost.checks.name_match.status, "pass");
+  assert.equal(finalPost.checks.hologram.status, "pass");
   assert.equal(finalPost.checks.face_liveness.status, "pass");
+  assert.deepEqual(finalPost.extracted, { name: "VEER ADYANI", dob: "15/03/2005", pan: "AB*******F" });
   // Giving up on liveness ends honestly WITHOUT a pass.
-  const e3 = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologram: "pass", cardRead: { name: "VEER ADYANI", dob: "15/03/2005" }, match: "pass", matchVerdict: { name_match: "pass" }, liveAttempts: 3 },
-    fetch: fetchSpy,
-  });
-  e3.onEvent({ type: "session_started", room: "sess_h3e" });
+  const e3 = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, hologram: "pass", liveAttempts: 3 }, fetch: fetchSpy });
+  e3.onEvent({ type: "session_started", room: "sess_h5c" });
   const gaveUpLive = await e3.tools.reportLiveness.handler({ what_i_see: "no clear head turn", face_visible: true, moved: false, give_up: true }, { sendData: async () => {} });
   assert.equal(gaveUpLive.decision, "needs_review");
   assert.match(gaveUpLive.say_next, /couldn't confirm the liveness check/);
   assert.equal(posts.at(-1).checks.face_liveness.status, "unclear");
 
-  // 3) Giving up on the hologram ends the verification honestly WITHOUT reading the card.
-  const c = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, holoAttempts: 3, holoSeen: "glare hid the emblem" },
-    fetch: fetchSpy,
-  });
-  c.onEvent({ type: "session_started", room: "sess_h4" });
-  const gaveUp = await c.tools.reportHologram.handler({ what_i_see: "still glare", seen: false, give_up: true }, { sendData: async () => {} });
+  // 6) Giving up on the hologram ends the verification honestly WITHOUT a pass; the
+  //    card read and match are kept in the record because they did happen.
+  const f = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED, holoAttempts: 3, holoSeen: "glare hid the emblem" }, fetch: fetchSpy });
+  f.onEvent({ type: "session_started", room: "sess_h6" });
+  const gaveUp = await f.tools.reportHologram.handler({ what_i_see: "still glare", card_visible: true, seen: false, give_up: true }, { sendData: async () => {} });
   assert.equal(gaveUp.gave_up, true);
   assert.equal(gaveUp.call_ending, true);
   assert.equal(gaveUp.decision, "needs_review");
@@ -203,9 +264,9 @@ test("hologram first: it gates the card read, with honest retries and an honest 
   const last = posts.at(-1);
   assert.equal(last.checks.hologram.status, "unclear");
   assert.match(last.checks.hologram.reasons[0], /after 3 attempt/);
-  // The card was never read in this path.
-  assert.equal(last.checks.card_read.status, "unclear");
-  assert.deepEqual(last.extracted, { name: "", dob: "" });
+  assert.equal(last.checks.card_read.status, "pass");
+  assert.equal(last.checks.name_match.status, "pass");
+  assert.equal(last.checks.face_liveness.status, "unclear");
 });
 
 
@@ -214,15 +275,18 @@ test("reportCardRead refuses placeholder names so a fabricated identity is never
   const say = (r) => r.say_next ?? "";
 
   // Before any capture, nothing can be reported.
-  const early = await config.tools.reportCardRead.handler({ what_i_see: "a card", legible: true, name: "Veer Dyani", dob: "12/05/1998" });
+  const early = await config.tools.reportCardRead.handler({ what_i_see: "a card", document_type: "pan", legible: true, name: "Veer Dyani", dob: "12/05/1998", pan: "ABCDE1234F" });
   assert.equal(early.accepted, false);
   assert.equal(early.reason, "card_not_captured");
 
-  // With consent given but no hologram confirmed, the card snap is locked.
-  await config.tools.confirmStart.handler({});
+  // Consent opens the card box straight away (no camera here); the hologram waits.
+  const consent = await config.tools.confirmStart.handler({});
+  assert.match(consent.say_next, /captureCard/);
   const captured = await config.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
   assert.equal(captured.captured, false);
-  assert.equal(captured.reason, "hologram_not_confirmed");
+  assert.equal(captured.reason, "no_camera_frame");
+  const holo = await config.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(holo.reason, "match_not_passed");
 
   // The placeholder detector is what turns "John Doe" into "not legible".
   assert.equal(isPlaceholderName("John Doe"), true);
@@ -236,6 +300,27 @@ test("reportCardRead refuses placeholder names so a fabricated identity is never
   const verdict = compareIdentity({ name: "John Doe", dob: "12/05/1998" }, { name: "John Doe", dob: "1998-05-12" });
   assert.equal(verdict.name_match, "unclear");
   assert.match(String(say(early)), /captureCard/);
+});
+
+
+test("the card detector is primed by the page and a quad counts only when it sits in the guide box", async () => {
+  assert.equal(typeof primeCardDetector, "function");
+  // No document → the loader fails softly and the steps keep the heuristic.
+  assert.equal(await primeCardDetector({ document: null }), false);
+  // Sample 320x200 with the guide box as the centred 80% x 80%.
+  const inBox = [{ x: 40, y: 30 }, { x: 280, y: 30 }, { x: 280, y: 170 }, { x: 40, y: 170 }];
+  assert.equal(quadInsideBox(inBox, 320, 200, 0.8, 0.8), true);
+  // A little over the box edge is fine (slack)...
+  const slightlyOut = inBox.map((p) => ({ x: p.x - 12, y: p.y }));
+  assert.equal(quadInsideBox(slightlyOut, 320, 200, 0.8, 0.8), true);
+  // ...but a card half outside the box is not "in the box".
+  const halfOut = inBox.map((p) => ({ x: p.x - 120, y: p.y }));
+  assert.equal(quadInsideBox(halfOut, 320, 200, 0.8, 0.8), false);
+
+  // Snap-on-sight helpers: card width from its corners, and corner motion.
+  assert.equal(quadWidth(inBox), 240);
+  assert.equal(cornerShift(inBox, inBox), 0);
+  assert.equal(cornerShift(inBox, inBox.map((q) => ({ x: q.x + 3, y: q.y + 4 }))), 5);
 });
 
 
@@ -281,22 +366,36 @@ test("the registered identity never reaches the model's prompt", () => {
 });
 
 
-test("the card read is locked until the hologram is confirmed, and the claim stays hidden", async () => {
-  const expected = { name: "MR VEER DYANI", dob: "1998-05-12" };
+test("the hologram is locked until the PAN card is read and matched, and the claim stays hidden", async () => {
+  const expected = { name: "MR VEER DYANI", dob: "1998-05-12", pan: "abcde1234f" };
   const config = createKycConfig({ expected, flowState: { confirmed: true } });
 
-  // No confirmed hologram → the card box refuses to open, pointing back to the hologram step.
-  const locked = await config.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
-  assert.equal(locked.reason, "hologram_not_confirmed");
-  assert.match(locked.say_next, /captureHologram/);
+  // No matched card → the hologram box refuses to open, pointing back to the card step.
+  const locked = await config.tools.captureHologram.handler({}, { video: null, sendData: async () => {} });
+  assert.equal(locked.reason, "match_not_passed");
+  assert.match(locked.say_next, /captureCard/);
   // Reporting a read without a captured photo is refused too.
-  const early = await config.tools.reportCardRead.handler({ what_i_see: "a card", legible: true, name: "Veer Dyani", dob: "12/05/1998" });
+  const early = await config.tools.reportCardRead.handler({ what_i_see: "a card", document_type: "pan", legible: true, name: "Veer Dyani", dob: "12/05/1998", pan: "ABCDE1234F" });
   assert.equal(early.reason, "card_not_captured");
 
   // The comparison the flow delegates to, against the same hidden claim:
-  assert.equal(compareIdentity({ name: "Veer Dyani", dob: "12/05/1998" }, expected).name_match, "pass");
-  assert.equal(compareIdentity({ name: "Someone Else", dob: "01/01/1990" }, expected).name_match, "fail");
-  assert.equal(compareIdentity({ name: "", dob: "" }, expected).name_match, "unclear");
+  assert.equal(compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "ABCDE1234F" }, expected).name_match, "pass");
+  assert.equal(compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "ABCDE 1234 F" }, expected).name_match, "pass", "spacing in the PAN is tolerated");
+  assert.equal(compareIdentity({ name: "Someone Else", dob: "01/01/1990", pan: "ABCDE1234F" }, expected).name_match, "fail");
+  // Right name and DOB but a different PAN is a confident mismatch, and the PAN is named.
+  const wrongPan = compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "ABCDE1234G" }, expected);
+  assert.equal(wrongPan.name_match, "fail");
+  assert.equal(wrongPan.pan_ok, false);
+  assert.equal(wrongPan.name_ok, true);
+  assert.equal(wrongPan.dob_ok, true);
+  // No PAN read, or one that isn't in the PAN format, is "cannot compare", never a match.
+  assert.equal(compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "" }, expected).name_match, "unclear");
+  assert.equal(compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "123456789012" }, expected).name_match, "unclear");
+  assert.equal(compareIdentity({ name: "", dob: "", pan: "" }, expected).name_match, "unclear");
+  // A claim without a PAN (older enrolments) still compares name and DOB only.
+  const noPanClaim = compareIdentity({ name: "Veer Dyani", dob: "12/05/1998", pan: "" }, { name: "Veer Dyani", dob: "1998-05-12" });
+  assert.equal(noPanClaim.name_match, "pass");
+  assert.equal("pan_ok" in noPanClaim, false);
 });
 
 
@@ -311,7 +410,12 @@ test("the flow watchdog nudges the model when a step stalls, and goes quiet once
   });
   config.onEvent({ type: "session_started", room: "sess_wd" });
 
-  // No "yes" → asked again (and again), never the full greeting.
+  // Session creation alone must NOT start the consent reminder: the agent may not
+  // have joined yet, and the reminder would land right after the greeting.
+  await sleep(40);
+  assert.equal(sent.filter((m) => m.type === "nudge").length, 0, "no nudge before the greeting was heard");
+  // The greeting has been heard → no "yes" → asked again (and again), never the full greeting.
+  config.onEvent({ type: "spoken", id: "greeting" });
   await sleep(40);
   const asks = sent.filter((m) => m.type === "nudge" && /ready to begin/.test(m.text));
   assert.ok(asks.length >= 1, "should re-ask for consent");
@@ -320,8 +424,23 @@ test("the flow watchdog nudges the model when a step stalls, and goes quiet once
   // Consent given but the model never opened the box (e.g. interrupted) → told to call captureCard.
   await config.tools.confirmStart.handler({});
   await sleep(40);
-  assert.ok(sent.some((m) => m.type === "nudge" && /captureHologram now/.test(m.text)), "should nudge captureHologram");
+  assert.ok(sent.some((m) => m.type === "nudge" && /captureCard now/.test(m.text)), "should nudge captureCard");
+  assert.ok(!sent.some((m) => m.type === "nudge" && /captureHologram now/.test(m.text)), "the hologram is not nudged before the card is read");
   assert.ok(!sent.slice(asks.length).some((m) => /ready to begin/.test(m.text)), "consent nudge must stop after confirm");
+
+  // Details matched but the model never opened the tilt box → told to call captureHologram.
+  const sentHolo = [];
+  const matched = createKycConfig({
+    expected: { name: "Veeradyani", dob: "2005-03-15", pan: "ABCDE1234F" },
+    flowState: { confirmed: true, cardCaptured: true },
+    sendData: async (m) => sentHolo.push(m),
+    watchdog: { holo: 15 },
+    fetch: async () => ({ ok: true, json: async () => ({ stored: true }) }),
+  });
+  matched.onEvent({ type: "session_started", room: "sess_wd_holo" });
+  await matched.tools.reportCardRead.handler({ what_i_see: "a PAN card", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "ABCDE1234F" });
+  await sleep(40);
+  assert.ok(sentHolo.some((m) => m.type === "nudge" && /captureHologram now/.test(m.text)), "should nudge captureHologram after the match");
 
   // Ending the session clears every timer — nothing fires afterwards.
   config.onEvent({ type: "ended" });
@@ -332,15 +451,15 @@ test("the flow watchdog nudges the model when a step stalls, and goes quiet once
   // Once the result is final, all watchdogs are cleared — no more nudges.
   const sent2 = [];
   const done = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, cardCaptured: true, hologram: "pass" },
+    expected: { name: "Veeradyani", dob: "2005-03-15", pan: "ABCDE1234F" },
+    flowState: { confirmed: true, cardCaptured: true },
     sendData: async (m) => sent2.push(m),
-    watchdog: { match: 15, report: 15 },
+    watchdog: { holo: 15, report: 15 },
     fetch: async () => ({ ok: true, json: async () => ({ stored: true }) }),
   });
   done.onEvent({ type: "session_started", room: "sess_wd2" });
-  // A legible read finalizes in one go (the hologram is already confirmed here).
-  await done.tools.reportCardRead.handler({ what_i_see: "a PAN card", legible: true, name: "VEER ADYANI", dob: "15/03/2004" });
+  // A legible read with a wrong DOB finalizes in one go.
+  await done.tools.reportCardRead.handler({ what_i_see: "a PAN card", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2004", pan: "ABCDE1234F" });
   const before = sent2.length;
   await sleep(50);
   assert.equal(sent2.slice(before).filter((m) => m.type === "nudge").length, 0, "no nudges after finalize");
@@ -354,17 +473,17 @@ test("a legible card read compares and finalizes in one go so the model only has
   const posts = [];
   const rendered = [];
   const config = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, cardCaptured: true, hologram: "pass" },
+    expected: { name: "Veeradyani", dob: "2005-03-15", pan: "ABCDE1234F" },
+    flowState: { confirmed: true, cardCaptured: true },
     fetch: async (_url, init) => { posts.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ stored: true }) }; },
     onResult: (r) => rendered.push(r),
   });
   config.onEvent({ type: "session_started", room: "sess_auto" });
 
-  // Wrong DOB, right name (exactly Veer's test). The read itself finalizes.
+  // Wrong DOB, right name and PAN (exactly Veer's test). The read itself finalizes.
   const sent = [];
   const read = await config.tools.reportCardRead.handler(
-    { what_i_see: "a PAN card", legible: true, name: "VEER ADYANI", dob: "15/03/2004" },
+    { what_i_see: "a PAN card", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2004", pan: "ABCDE1234F" },
     { sendData: async (m) => sent.push(m) },
   );
   assert.equal(read.accepted, true);
@@ -380,16 +499,16 @@ test("a legible card read compares and finalizes in one go so the model only has
   assert.equal(match.decision, "fail");
   assert.deepEqual(match.mismatched_fields, ["date of birth"]);
   assert.match(match.say_next, /the date of birth on the card does NOT match/);
-  assert.match(match.say_next, /\(the name does\)/);
+  assert.match(match.say_next, /\(the PAN number and the name do\)/);
   assert.match(match.say_next, /Do not call any other tool/i);
   // Never the values — neither the card's nor the registered ones.
-  assert.doesNotMatch(match.say_next, /VEER|ADYANI|2004|2005/);
+  assert.doesNotMatch(match.say_next, /VEER|ADYANI|2004|2005|ABCDE/);
   // Saved and rendered exactly once, with an honest card_read and the recomputed decision.
   assert.equal(posts.length, 1);
   assert.equal(posts[0].decision, "fail");
   assert.equal(posts[0].checks.card_read.status, "pass");
   assert.equal(posts[0].checks.name_match.status, "fail");
-  assert.deepEqual(posts[0].extracted, { name: "VEER ADYANI", dob: "15/03/2004" });
+  assert.deepEqual(posts[0].extracted, { name: "VEER ADYANI", dob: "15/03/2004", pan: "AB*******F" });
   // The verdict is saved immediately but SHOWN only when the agent starts speaking it,
   // so the person never reads FAIL on screen while the voice is still "checking".
   assert.equal(rendered.length, 0, "not revealed before the agent speaks");
@@ -407,24 +526,24 @@ test("a legible card read compares and finalizes in one go so the model only has
   assert.match(match.say_next, /never say .*get back to you/i, "deferral phrases are explicitly banned");
 
   // A later submitResult from the model must NOT double-post or change the outcome.
-  const again = await config.tools.submitResult.handler({ decision: "pass", checks: { card_read: { status: "pass", confidence: 1, reasons: [] } }, extracted: { name: "x", dob: "y" }, notes: "" });
+  const again = await config.tools.submitResult.handler({ decision: "pass", checks: { card_read: { status: "pass", confidence: 1, reasons: [] } }, extracted: { name: "x", dob: "y", pan: "z" }, notes: "" });
   assert.equal(again.decision, "fail");
   assert.equal(posts.length, 1);
 
-  // Happy path: right DOB → pass.
+  // Happy path: right DOB → the details match and the hologram step is next.
   const ok = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, cardCaptured: true, hologram: "pass" },
+    expected: { name: "Veeradyani", dob: "2005-03-15", pan: "ABCDE1234F" },
+    flowState: { confirmed: true, cardCaptured: true },
     fetch: async () => ({ ok: true, json: async () => ({ stored: true }) }),
   });
   ok.onEvent({ type: "session_started", room: "sess_ok" });
   const pass = await ok.tools.reportCardRead.handler(
-    { what_i_see: "a PAN card", legible: true, name: "VEER ADYANI", dob: "15/03/2005" },
+    { what_i_see: "a PAN card", document_type: "pan", legible: true, name: "VEER ADYANI", dob: "15/03/2005", pan: "ABCDE1234F" },
     { sendData: async () => {} },
   );
-  // A match no longer finalizes by itself - liveness comes first.
+  // A match does not finalize by itself - the hologram and liveness come first.
   assert.equal(pass.match, "pass");
-  assert.match(pass.say_next, /captureLiveness/);
+  assert.match(pass.say_next, /captureHologram/);
 });
 
 
@@ -667,8 +786,8 @@ test("documentPresent sees a light rectangle aligned with the box, not a bright 
 test("a hologram can never be 'seen' when no card is in the frames", async () => {
   const posts = [];
   const config = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologramCaptured: true, holoAttempts: 1 },
+    expected: CLAIM,
+    flowState: { ...MATCHED, hologramCaptured: true, holoAttempts: 1 },
     fetch: async (_u, init) => { posts.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ stored: true }) }; },
   });
   config.onEvent({ type: "session_started", room: "sess_nocard" });
@@ -678,8 +797,8 @@ test("a hologram can never be 'seen' when no card is in the frames", async () =>
   assert.equal(r.reason, "no_card_visible");
   assert.match(r.say_next, /inside the box/);
   assert.equal(posts.length, 0, "not finalized");
-  // The card box stays locked because the hologram is not confirmed.
-  const locked = await config.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
+  // Liveness stays locked because the hologram is not confirmed.
+  const locked = await config.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
   assert.equal(locked.reason, "hologram_not_confirmed");
 });
 
@@ -687,7 +806,7 @@ test("a hologram can never be 'seen' when no card is in the frames", async () =>
 test("a capture tool refuses a duplicate call while the first is still running", async () => {
   // Emulate a running capture by holding a fake video that never yields frames long
   // enough to overlap a second call: the second call must be refused instantly.
-  const config = createKycConfig({ expected: { name: "Veeradyani", dob: "2005-03-15" }, flowState: { confirmed: true } });
+  const config = createKycConfig({ expected: CLAIM, flowState: { ...MATCHED } });
   const slowVideo = { videoWidth: 1280, videoHeight: 720, clientWidth: 640, clientHeight: 360, ownerDocument: null, parentElement: null };
   // captureHologramBurst will throw on the fake element (no document) - that still
   // exercises the inFlight bookkeeping: while the first promise is pending, a second
@@ -741,22 +860,23 @@ test("documentPresent tolerates an imperfect fit and a light background", () => 
 test("the hologram counts on whichever side it is on - the back is not a mistake", async () => {
   const posts = [];
   const config = createKycConfig({
-    expected: { name: "Veeradyani", dob: "2005-03-15" },
-    flowState: { confirmed: true, hologramCaptured: true, holoAttempts: 1 },
+    expected: CLAIM,
+    flowState: { ...MATCHED, hologramCaptured: true, holoAttempts: 1 },
     fetch: async (_u, init) => { posts.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ stored: true }) }; },
   });
   config.onEvent({ type: "session_started", room: "sess_backholo" });
-  // Veer's card: the hologram is on the BACK. Seen there = confirmed, card step unlocks.
+  // Veer's card: the hologram is on the BACK. Seen there = confirmed, liveness unlocks.
   const r = await config.tools.reportHologram.handler(
     { what_i_see: "the back of a PAN card; the silver emblem shifts from silver to green", card_visible: true, side: "back", seen: true },
   );
   assert.equal(r.seen, true);
-  assert.match(r.say_next, /turn the card to the front/);
-  const unlocked = await config.tools.captureCard.handler({}, { video: null, sendData: async () => {} });
+  assert.match(r.say_next, /captureLiveness/);
+  const unlocked = await config.tools.captureLiveness.handler({}, { video: null, sendData: async () => {} });
   assert.equal(unlocked.reason, "no_camera_frame");
   // The HOLOGRAM step never tells people the hologram must be on the front (the
   // card-read step legitimately asks for the front - that's where the details are).
-  const hologramStep = KYC_PROMPT.slice(KYC_PROMPT.indexOf("STEP 1"), KYC_PROMPT.indexOf("STEP 2"));
+  const hologramStep = KYC_PROMPT.slice(KYC_PROMPT.indexOf("STEP 2 —"), KYC_PROMPT.indexOf("STEP 3 —"));
+  assert.ok(hologramStep.length > 200, "found the hologram step of the prompt");
   assert.match(hologramStep, /hologram side facing the camera/);
   assert.doesNotMatch(hologramStep, /hologram is on the\s+front|flip it to the front|front facing the camera/i);
 });

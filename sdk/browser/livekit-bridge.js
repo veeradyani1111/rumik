@@ -17,9 +17,50 @@ export class LiveKitBridge {
     this.localTracks = [];
   }
 
-  async connect(url, token) {
+  async load() {
+    if (this.client) return this.client;
     log("info", "loading livekit-client module");
     this.client = await import(LIVEKIT_BROWSER_MODULE);
+    return this.client;
+  }
+
+  // Media is ACQUIRED (permission prompts, device opened) before the room is
+  // joined and PUBLISHED after: the agent greets the moment a participant
+  // appears in the room, so joining first meant the greeting played while the
+  // browser's camera prompt was still open.
+  async acquireMicrophone() {
+    await this.load();
+    log("info", "requesting microphone (getUserMedia audio)");
+    const track = await this.client.createLocalAudioTrack({
+      echoCancellation: true,
+      noiseSuppression: true,
+    });
+    this.localTracks.push(track);
+    log("info", "microphone ready", { label: track?.mediaStreamTrack?.label });
+    return track;
+  }
+
+  async acquireCamera() {
+    await this.load();
+    log("info", "requesting camera (getUserMedia video)");
+    // 1080p: card stills are grabbed straight off this local track, so its
+    // native resolution — not the WebRTC-compressed stream — sets read quality.
+    const track = await this.client.createLocalVideoTrack({
+      resolution: { width: 1920, height: 1080 },
+    });
+    this.localTracks.push(track);
+    log("info", "camera ready", { label: track?.mediaStreamTrack?.label });
+    return track;
+  }
+
+  async publishTrack(track) {
+    await this.room.localParticipant.publishTrack(track);
+    log("info", "track published", { sid: track?.sid, kind: track?.kind });
+    return track;
+  }
+
+  async connect(url, token) {
+    await this.load();
     const { Room, RoomEvent, Track } = this.client;
     this.room = new Room({ adaptiveStream: true, dynacast: true });
 
@@ -73,31 +114,6 @@ export class LiveKitBridge {
       room: this.room?.name,
       localIdentity: this.room?.localParticipant?.identity,
     });
-  }
-
-  async publishMicrophone() {
-    log("info", "requesting microphone (getUserMedia audio)");
-    const track = await this.client.createLocalAudioTrack({
-      echoCancellation: true,
-      noiseSuppression: true,
-    });
-    await this.room.localParticipant.publishTrack(track);
-    this.localTracks.push(track);
-    log("info", "microphone track published", { sid: track?.sid, label: track?.mediaStreamTrack?.label });
-    return track;
-  }
-
-  async publishCamera() {
-    log("info", "requesting camera (getUserMedia video)");
-    // 1080p: card stills are grabbed straight off this local track, so its
-    // native resolution — not the WebRTC-compressed stream — sets read quality.
-    const track = await this.client.createLocalVideoTrack({
-      resolution: { width: 1920, height: 1080 },
-    });
-    await this.room.localParticipant.publishTrack(track);
-    this.localTracks.push(track);
-    log("info", "camera track published", { sid: track?.sid, label: track?.mediaStreamTrack?.label });
-    return track;
   }
 
   async sendData(payload) {

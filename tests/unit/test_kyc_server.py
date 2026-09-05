@@ -88,6 +88,7 @@ async def test_only_whitelisted_assets_are_served() -> None:
     async with _client_for(app) as client:
         index = await client.get("/")
         config = await client.get("/kyc-config.js")
+        detector = await client.get("/card-detector.js")
         # Server source, schema code, and stored KYC results must never be
         # reachable over HTTP.
         leaks = [
@@ -98,6 +99,8 @@ async def test_only_whitelisted_assets_are_served() -> None:
     assert index.status_code == 200
     assert "Rumik" in index.text
     assert config.status_code == 200
+    assert detector.status_code == 200
+    assert "detectCardQuad" in detector.text
     assert "createKycConfig" in config.text
     assert [response.status_code for response in leaks] == [404, 404, 404, 404, 404]
 
