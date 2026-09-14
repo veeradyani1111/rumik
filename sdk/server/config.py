@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_CEREBRAS_LLM_MODEL = "qwen-3.8-27b"
+DEPRECATED_CEREBRAS_LLM_MODELS = {"gemma-4-31b"}
 
 
 def _clamp(value: Any, minimum: float, maximum: float, cast):
@@ -67,7 +71,7 @@ class Settings(BaseSettings):
     # Speak each sentence as soon as the model has produced it, instead of waiting
     # for the whole reply (first audio 1-3s sooner on long lines).
     rumik_tts_stream_sentences: bool = True
-    cerebras_llm_model: str = "qwen-3.8-27b"  # the Cerebras model with image input
+    cerebras_llm_model: str = DEFAULT_CEREBRAS_LLM_MODEL  # the Cerebras model with image input
     gemini_llm_model: str = "gemini-3.5-flash-lite"  # smallest current model with vision + tools
     gemini_stt_model: str = "gemini-3.5-flash-lite"  # gemini-3.5-transcribe returns EMPTY via generateContent
     # "live" streams audio over Gemini's Live API while the person talks (transcript
@@ -97,6 +101,12 @@ class Settings(BaseSettings):
 
     session_token_ttl_sec: int = 300
     max_concurrent_sessions: int = 4
+
+    @field_validator("cerebras_llm_model")
+    @classmethod
+    def replace_deprecated_cerebras_model(cls, value: str) -> str:
+        model = value.strip()
+        return DEFAULT_CEREBRAS_LLM_MODEL if model in DEPRECATED_CEREBRAS_LLM_MODELS else model
 
     @property
     def sample_policy(self) -> SamplePolicy:

@@ -161,6 +161,12 @@ def test_cerebras_default_model_is_qwen() -> None:
     assert settings.cerebras_llm_model == "qwen-3.8-27b"
 
 
+def test_deprecated_cerebras_gemma_env_value_resolves_to_qwen() -> None:
+    settings = Settings(_env_file=None, cerebras_llm_model="gemma-4-31b")
+
+    assert settings.cerebras_llm_model == "qwen-3.8-27b"
+
+
 def _settings(**overrides) -> Settings:
     base = dict(
         _env_file=None,
