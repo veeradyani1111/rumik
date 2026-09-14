@@ -71,7 +71,7 @@ All model choices live in one block at the top of `.env` (restart the platform a
 | `GEMINI_STT_MODE` | `live` (default) / `segmented` | `live` streams audio over Gemini's Live API while the person talks and our VAD closes the turn: transcript ~0.3s after they stop. `segmented` is the old one-shot call (~3s) |
 | `GEMINI_LIVE_STT_MODEL` | `gemini-3.5-transcribe-live` | transcription-only Live model (the `transcribe` models only work over the Live API, which is why `gemini-3.5-transcribe` returned nothing through generateContent) |
 | `GEMINI_LLM_MODEL` / `GEMINI_STT_MODEL` | e.g. `gemini-3.5-flash-lite` | `GEMINI_STT_MODEL` is only used in `segmented` mode (flash-lite with a `[no speech]` guard) |
-| `CEREBRAS_LLM_MODEL` | `gemma-4-31b` | the Cerebras model with image input |
+| `CEREBRAS_LLM_MODEL` | `qwen-3.8-27b` | the Cerebras model with image input |
 
 Text-to-speech is always Rumik. `GET /health` reports the active `models` for the next session, and every session logs `MODEL_PROVIDER llm=… stt=…`.
 

@@ -27,7 +27,7 @@ def load_worker_config(room: str, environ: Mapping[str, str]) -> tuple[AgentConf
         llm_provider=environ.get("LLM_PROVIDER", "openai"),
         stt_provider=environ.get("STT_PROVIDER", ""),
         cerebras_api_key=environ.get("CEREBRAS_API_KEY", ""),
-        cerebras_llm_model=environ.get("CEREBRAS_LLM_MODEL", "gemma-4-31b"),
+        cerebras_llm_model=environ.get("CEREBRAS_LLM_MODEL", "qwen-3.8-27b"),
         gemini_api_key=environ.get("GEMINI_API_KEY", ""),
         gemini_llm_model=environ.get("GEMINI_LLM_MODEL", "gemini-3.5-flash-lite"),
         gemini_stt_model=environ.get("GEMINI_STT_MODEL", "gemini-3.5-flash-lite"),

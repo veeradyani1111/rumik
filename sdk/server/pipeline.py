@@ -224,7 +224,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
         )
     sampler = FrameSampler(config.sample_policy)
     if settings.llm_provider == "cerebras":
-        # OpenAI-compatible; gemma-4-31b accepts base64 image data URIs (the format
+        # OpenAI-compatible; Qwen accepts base64 image data URIs (the format
         # our card/tilt photos already use) and supports parallel + strict tools.
         llm = CerebrasLLMService(
             api_key=settings.cerebras_api_key,
