@@ -53,7 +53,8 @@ const agent = RumikAgent.create({
     2. Ask them to tilt the card side to side. Look again — a real hologram
        shifts as it tilts; a flat printed photo does not.
     3. Ask them to turn their head or blink to prove they are a live person. Look.
-    4. Ask them to say their full name. Check it matches the card.
+    4. Use the client tool to compare the card-read name, PAN and date of birth
+       with the details entered before KYC. Never speak the identity values.
     Then call submitResult with your decision and the reasons.`,
   tools: {
     submitResult: {
@@ -568,11 +569,11 @@ Pydantic. Final result:
 
 ### 15.2 `kyc/verify.py` — pure, unit-tested helpers (the developer's own logic)
 - **PAN validate:** regex `^[A-Z]{5}[0-9]{4}[A-Z]$`; 4th char = holder type (`P`=individual). Normalize DOB.
-- **Name match:** normalize (uppercase, strip honorifics/punctuation, collapse spaces) + token-set/Levenshtein ratio; `match(card_name, spoken_name, threshold=0.82) -> {match, score}`.
+- **Name match:** compare the card-read name with the entered name after normalization (uppercase, strip honorifics/punctuation, collapse spaces, sort unique words). Require exact equality; `match_card_name(card_name, registered_name) -> {match, score}` returns a score of 0 or 1. The live browser uses `compareIdentity` to check name, PAN and DOB together; it additionally tolerates joined name spacing. The legacy result key `name_match` describes that combined details check.
 - **Decision policy:** `decide(checks)` — `pass` only if `card_read=pass` AND `name_match=pass` AND both liveness checks `pass`; `fail` if `card_read=fail` OR `name_match=fail`; else `needs_review`. Explicit truth table, unit-tested.
 
 ### 15.3 `kyc/kyc-config.js` — the whole "KYC app" (prompt + tools)
-- **The prompt** encodes the step machine in plain English (greet → show card → tilt → liveness → say name → result), instructing the agent to **`look`** at each visual step and to **`submitResult`** at the end. The vision judgements (does a card show? does the hologram shift across the tilt burst? did the instructed motion occur?) are done by the vision LLM from the frames `look` injects.
+- **The current flow** is enter details → consent → capture card → `reportCardRead` → compare entered details → hologram → liveness → result. The model reads the card image; browser code compares name, PAN and DOB and gates later steps. A mismatch ends the flow before hologram and liveness. Identity values are never spoken aloud.
 - **Tools:**
   - `submitResult(result)` → browser handler: POST to the dev's endpoint (which the demo forwards to `/kyc-result`), then render the results panel. This is the structured output the assignment asks for.
   - (Optional) `validatePan(pan)` → a client tool that runs the regex in-page and returns validity, demonstrating a developer client-tool with real logic.

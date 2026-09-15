@@ -117,7 +117,7 @@ This append-only log records user-authored prompts given to the coding agent in 
 > Don't make the user click the capture button — auto-detect when the card fills
 > the frame and snap it. Show "connecting" until the agent's voice actually
 > arrives. Make the side steps mirror what's happening live. Don't ask for the
-> blink twice — and when a motion check runs, grab a rapid burst of frames so it
+> blink twice — and when a motion check runs, grapshot is b a rapid burst of frames so it
 > can really analyze (hologram too). Have the agent announce when it's analyzing,
 > driven by the flow/tools, not hardcoded. Also look for vulnerabilities and fix
 > them.

@@ -1,6 +1,6 @@
 import pytest
 
-from kyc.verify import match_name, normalize_dob, normalize_name, pan_holder_type, validate_pan
+from kyc.verify import match_card_name, normalize_dob, normalize_name, pan_holder_type, validate_pan
 
 
 @pytest.mark.parametrize("pan", ["ABCDE1234F", " abcde1234f "])
@@ -20,7 +20,7 @@ def test_pan_holder_type_reads_fourth_character() -> None:
 
 
 def test_name_matching_ignores_honorifics_punctuation_order_and_case() -> None:
-    result = match_name("Mr. Veer Adyani", "ADYANI, VEER")
+    result = match_card_name("Mr. Veer Adyani", "ADYANI, VEER")
 
     assert normalize_name("Mr. Veer Adyani") == "VEER ADYANI"
     assert result["match"] is True
@@ -28,10 +28,15 @@ def test_name_matching_ignores_honorifics_punctuation_order_and_case() -> None:
 
 
 def test_name_matching_reports_a_clear_mismatch() -> None:
-    result = match_name("Veer Adyani", "Asha Sharma")
+    result = match_card_name("Veer Adyani", "Asha Sharma")
 
     assert result["match"] is False
-    assert result["score"] < 0.82
+    assert result["score"] == 0.0
+
+
+@pytest.mark.parametrize("card, registered", [("Veer Adyani", "Veer Adyanii"), ("", ""), ("Mr.", "Dr.")])
+def test_name_matching_rejects_near_matches_and_empty_names(card: str, registered: str) -> None:
+    assert match_card_name(card, registered) == {"match": False, "score": 0.0}
 
 
 @pytest.mark.parametrize(

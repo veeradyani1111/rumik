@@ -223,7 +223,7 @@ export function cleanClaimValue(value, maxLength = 120) {
     .slice(0, maxLength);
 }
 
-// --- Deterministic identity matching (mirrors kyc/verify.py) -----------------
+// --- Deterministic comparison of card-read and entered identity details -----
 
 const HONORIFICS = new Set(["MR", "MRS", "MS", "MISS", "DR", "SHRI", "SMT"]);
 
@@ -255,30 +255,14 @@ export function isPlaceholderName(name) {
   return normalized.replace(/[^A-Z]/g, "").length < 2;
 }
 
-function levenshtein(a, b) {
-  const cols = b.length + 1;
-  let prev = Array.from({ length: cols }, (_, i) => i);
-  for (let i = 1; i <= a.length; i += 1) {
-    const curr = [i];
-    for (let j = 1; j < cols; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
-    }
-    prev = curr;
-  }
-  return prev[cols - 1];
-}
-
-// Similarity on sorted unique tokens via normalized Levenshtein distance. The same
-// token set (any order, honorifics/case/punctuation aside) scores 1.0.
-export function nameSimilarity(a, b) {
+// Exact matching on sorted unique tokens; retain the numeric score for callers.
+export function nameMatchScore(cardName, registeredName) {
   const setify = (value) =>
     [...new Set(normalizeName(value).split(" ").filter(Boolean))].sort().join(" ");
-  const x = setify(a);
-  const y = setify(b);
+  const x = setify(cardName);
+  const y = setify(registeredName);
   if (!x || !y) return 0;
-  if (x === y) return 1;
-  return 1 - levenshtein(x, y) / Math.max(x.length, y.length);
+  return x === y ? 1 : 0;
 }
 
 const MONTHS = {
@@ -358,10 +342,11 @@ const DOCUMENT_LABELS = {
 };
 
 // Compare what the model READ from the card against what the applicant registered.
+// name_match is the legacy result key for the combined name, PAN and DOB check.
 // The model sees only this verdict, never the registered values. A placeholder
 // name counts as "nothing read". The PAN number is compared exactly; a PAN that
 // isn't even in the PAN format is "cannot compare", never a match.
-export function compareIdentity(readValues = {}, expected = {}, { threshold = 0.82 } = {}) {
+export function compareIdentity(readValues = {}, expected = {}) {
   const claimName = cleanClaimValue(expected.name, 120);
   const claimDob = cleanClaimValue(expected.dob, 40);
   const claimPan = normalizePan(expected.pan);
@@ -394,11 +379,11 @@ export function compareIdentity(readValues = {}, expected = {}, { threshold = 0.
   const squash = (v) => normalizeName(v).replace(/\s+/g, "");
   const nameScore = claimName && cardName
     ? Math.max(
-        nameSimilarity(cardName, claimName),
+        nameMatchScore(cardName, claimName),
         squash(cardName) && squash(cardName) === squash(claimName) ? 1 : 0,
       )
     : 0;
-  const nameOk = claimName ? nameScore >= threshold : true;
+  const nameOk = claimName ? nameScore === 1 : true;
 
   const cardDobIso = normalizeDob(cardDob);
   const claimDobIso = normalizeDob(claimDob);

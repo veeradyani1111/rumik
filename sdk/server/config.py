@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     # Speak each sentence as soon as the model has produced it, instead of waiting
     # for the whole reply (first audio 1-3s sooner on long lines).
     rumik_tts_stream_sentences: bool = True
-    cerebras_llm_model: str = "gemma-4-31b"  # the Cerebras model with image input
+    cerebras_llm_model: str = "qwen-3.8-27b"  # the Cerebras model with image input
     gemini_llm_model: str = "gemini-3.5-flash-lite"  # smallest current model with vision + tools
     gemini_stt_model: str = "gemini-3.5-flash-lite"  # gemini-3.5-transcribe returns EMPTY via generateContent
     # "live" streams audio over Gemini's Live API while the person talks (transcript

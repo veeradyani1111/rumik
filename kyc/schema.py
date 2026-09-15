@@ -22,6 +22,7 @@ class KYCChecks(StrictModel):
     card_read: CheckResult
     hologram: CheckResult
     face_liveness: CheckResult
+    # Legacy result key: compares card-read name, PAN and DOB with entered details.
     name_match: CheckResult
     face_match: CheckResult
 

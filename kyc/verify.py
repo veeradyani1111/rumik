@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from difflib import SequenceMatcher
 from typing import Literal, Mapping
 
 
@@ -42,14 +41,12 @@ def normalize_name(name: str) -> str:
     return " ".join(token for token in tokens if token not in HONORIFICS)
 
 
-def match_name(card_name: str, spoken_name: str, threshold: float = 0.82) -> dict[str, bool | float]:
+def match_card_name(card_name: str, registered_name: str) -> dict[str, bool | float]:
+    """Compare card-read and entered names; the live browser flow uses JS helpers."""
     card_tokens = sorted(set(normalize_name(card_name).split()))
-    spoken_tokens = sorted(set(normalize_name(spoken_name).split()))
-    if not card_tokens or not spoken_tokens:
-        score = 0.0
-    else:
-        score = SequenceMatcher(None, " ".join(card_tokens), " ".join(spoken_tokens)).ratio()
-    return {"match": score >= threshold, "score": round(score, 4)}
+    registered_tokens = sorted(set(normalize_name(registered_name).split()))
+    matched = bool(card_tokens) and card_tokens == registered_tokens
+    return {"match": matched, "score": 1.0 if matched else 0.0}
 
 
 def normalize_dob(value: str) -> str | None:

@@ -155,6 +155,12 @@ def test_pipeline_builds_cerebras_llm_with_gemini_stt() -> None:
                     database_url="postgres://x").external_services_configured is False
 
 
+def test_cerebras_default_model_is_qwen() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.cerebras_llm_model == "qwen-3.8-27b"
+
+
 def _settings(**overrides) -> Settings:
     base = dict(
         _env_file=None,
