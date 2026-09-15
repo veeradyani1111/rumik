@@ -233,9 +233,14 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
     if settings.llm_provider == "cerebras":
         # OpenAI-compatible; Qwen accepts base64 image data URIs (the format
         # our card/tilt photos already use) and supports parallel + strict tools.
+        # reasoning_effort=none: Qwen otherwise "thinks" before every reply,
+        # which measured ~3.1s vs ~1.25s per turn with it off.
         llm = CerebrasLLMService(
             api_key=settings.cerebras_api_key,
-            settings=CerebrasLLMSettings(model=settings.cerebras_llm_model),
+            settings=CerebrasLLMSettings(
+                model=settings.cerebras_llm_model,
+                extra={"reasoning_effort": "none"},
+            ),
         )
     elif settings.llm_provider == "gemini":
         # Gemini 2.5 'thinks' by default, adding seconds to every turn; this flow
@@ -257,6 +262,12 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
         )
     tts = create_rumik_tts(settings, voice=config.voice, force_tone=config.force_tone or None)
     context = build_context(config)
+    # Role for notes injected mid-conversation (greeting note, page narration,
+    # page nudges). Cerebras/Qwen rejects any system message that is not the
+    # first message ("System message must be at the beginning"), so send them
+    # as bracketed user turns there. Gemini keeps system notes (it merged and
+    # re-spoke consecutive model turns when these were assistant messages).
+    note_role = "user" if settings.llm_provider == "cerebras" else "system"
     # Pipecat 1.3.0 defaults the user-turn-stop decision to an ML model
     # (LocalSmartTurnAnalyzerV3). For a KYC flow we want a deterministic,
     # explainable turn end: once VAD detects the user paused and at least one
@@ -460,7 +471,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
                 if speak_id:
                     narration.request(speak_id, text)
                 context.add_message({
-                    "role": "system",
+                    "role": note_role,
                     "content": f"[Already spoken to the person by your voice - do not repeat it: \"{text}\"]",
                 })
                 await worker.queue_frame(TTSSpeakFrame(text, append_to_context=False))
@@ -489,7 +500,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
                 return
             logger.info("page nudge: {!r}", text)
             await worker.queue_frame(
-                LLMMessagesAppendFrame(messages=[{"role": "system", "content": text}], run_llm=True)
+                LLMMessagesAppendFrame(messages=[{"role": note_role, "content": text}], run_llm=True)
             )
             return
         await bridge.handle_message(data)
@@ -767,7 +778,7 @@ def build_pipeline(config: AgentConfig, settings: Settings) -> PipelineRuntime:
             # Recorded as a system NOTE, not a model turn: Gemini merges consecutive
             # model messages and re-speaks them, which echoed the whole greeting.
             context.add_message({
-                "role": "system",
+                "role": note_role,
                 "content": f"[Already spoken to the person by your voice - do not repeat it: \"{config.greeting}\"]",
             })
             # append_to_context=False: the aggregator would otherwise ALSO record this
