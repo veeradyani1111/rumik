@@ -120,7 +120,14 @@ def build_context(config: AgentConfig) -> LLMContext:
     )
     system_prompt = f"{config.prompt.strip()}\n\n{greeting_instruction}\n\n{SYSTEM_PROMPT_FRAGMENT}"
     return LLMContext(
-        messages=[{"role": "system", "content": system_prompt}],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            # Cerebras/Qwen chat templates reject a request with no user message
+            # ("No user query found in messages"). The greeting note and page
+            # nudges are system-role, so without this seed the first run 400s
+            # and the agent appears to never join.
+            {"role": "user", "content": "[The person has joined the call.]"},
+        ],
         tools=ToolsSchema(standard_tools=tools),
     )
 
